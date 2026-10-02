@@ -449,11 +449,12 @@ Factory defaults kept: Static IP 192.168.1.20 / 255.255.255.0; Art-Net Net 0, Su
 - CLI: `dmxreactive list-devices`, `dmxreactive meter [--file F] [--device D] [--seconds N]`. Config section `audio:` (device, sample_rate 48000, block_size 1024 = 21 ms, latency_ms 20).
 - Verified silently with virtual sinks (`pactl load-module module-null-sink`): tone level read back exactly (−15.03 dBFS for a 0.25-amplitude sine), no dropped blocks, ~46 blocks/s; after switching the default output, the capture reopens on the new sink's monitor within ~1 s and does not leak the old sink's audio.
 - Mixer microphones are not captured (they never touch the laptop); only what the laptop plays.
-- Still to do: live check with real YouTube/karaoke on the speakers, measure capture latency vs. real sound (loopback click test), 30 min soak, behaviour with a USB DAC/mixer as default output.
+- Live check done by user 2026-10-02: 30 s of real playback → 46.7 blocks/s (expected 46.9), 0 dropped, 0 restarts, signal around −23 dBFS RMS.
+- Still to do: measure capture latency vs. real sound (loopback click test), 30 min soak, behaviour with a USB DAC/mixer as default output.
 
 ## 13d. Later hardware measurements (camera)
 
-- User recalls the Sony a6000 may support higher frame rates in some mode; if so, repeat the strobe sweep above 10 Hz (Pot Strobe 10–19 Hz extrapolated, PicoSpot up to 25 Hz) before ever raising `safe_max_hz`.
+- **TODO (optional, precision): high-frame-rate strobe re-measurement.** The user recalls the a6000 can record at much higher frame rates once its settings are found again (to our knowledge the a6000 tops out at 1080/60p, so this is unconfirmed; if it is not possible, a phone's 240 fps slow-motion mode, or a photodiode/LDR into the sound card's line-in analysed as audio, would give kHz-level timing). Goals: (1) measure the Pot Strobe above 10 Hz (10–19 Hz is extrapolated) and the PicoSpot up to 25 Hz before ever raising `safe_max_hz`; (2) measure flash pulse width; (3) measure end-to-end audio→light latency (click track on the laptop → flash). Use `strobe-sweep --max-value` and `tools/strobe_analyze.py` (the analyser's ~10 Hz limit is a 60 fps limit, not an algorithm limit). Millisecond precision is a nice-to-have, not a requirement for the party use.
 - PicoSpot tilt range (200° vs 230°) and gobo list.
 
 ## 13b. Implementation status

@@ -8,3 +8,4 @@ config/config.yaml
 support/*.MP4
 support/*.mp4
 support/*.MOV
+support/tracks/
