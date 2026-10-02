@@ -99,6 +99,62 @@ def cmd_strobe_sweep(args) -> int:
     return 0
 
 
+def cmd_list_devices(args) -> int:
+    from dmxreactive.audio.devices import default_sink, list_sources
+
+    sink = default_sink()
+    print(f"Default output: {sink}")
+    print(f"Capture target (@DEFAULT_MONITOR@): {sink}.monitor" if sink else "No default output")
+    print("Sources (use the name in config audio.device; '*' = monitor of the default output):")
+    for src in list_sources():
+        mark = "*" if sink and src.name == f"{sink}.monitor" else " "
+        kind = "monitor" if src.is_monitor else "input  "
+        print(f" {mark} {kind} {src.state:<9} {src.name}")
+    return 0
+
+
+def _bar(db: float, width: int = 40, floor: float = -60.0) -> str:
+    n = round(max(0.0, min(1.0, (db - floor) / -floor)) * width)
+    return "#" * n + "-" * (width - n)
+
+
+def cmd_meter(args) -> int:
+    from dmxreactive.audio.factory import create_source
+    from dmxreactive.audio.level import peak_dbfs, rms_dbfs
+
+    config = load_config(args.config)
+    source = create_source(config.audio, args.file, args.device)
+    tty = sys.stdout.isatty()
+    source.start()
+    print(f"Level meter ({'file ' + args.file if args.file else 'live capture'}); Ctrl-C to stop")
+    t0 = last = time.monotonic()
+    rms_min, rms_max, silent_blocks = 0.0, -200.0, 0
+    try:
+        while args.seconds is None or time.monotonic() - t0 < args.seconds:
+            block = source.read(1.0)
+            if block is None:
+                print("\nno audio for 1 s (is something playing? is the device right?)")
+                continue
+            rms, peak = rms_dbfs(block), peak_dbfs(block)
+            rms_min, rms_max = min(rms_min, rms), max(rms_max, rms)
+            silent_blocks += peak < -80
+            now = time.monotonic()
+            if now - last >= (0.05 if tty else 0.5):
+                last = now
+                line = f"RMS {rms:6.1f} dBFS  peak {peak:6.1f}  |{_bar(rms)}|"
+                print("\r" + line if tty else line, end="" if tty else "\n", flush=True)
+    except (KeyboardInterrupt, EOFError):
+        pass
+    finally:
+        source.stop()
+    elapsed = time.monotonic() - t0
+    st = source.stats
+    print(f"\n{st.blocks} blocks in {elapsed:.1f}s ({st.blocks / elapsed:.1f}/s, expected "
+          f"{config.audio.sample_rate / config.audio.block_size:.1f}/s), dropped {st.dropped}, "
+          f"restarts {st.restarts}, near-silent blocks {silent_blocks}")
+    return 0
+
+
 def cmd_hold(args) -> int:
     """Hold fixed channel values on one fixture (bring-up/debugging), then blackout."""
     config = load_config(args.config)
@@ -155,6 +211,15 @@ def main(argv: list[str] | None = None) -> int:
                    help="calibration only: raise the DMX cap above the profile's safe limit")
     p.add_argument("--target")
     p.set_defaults(func=cmd_strobe_sweep)
+
+    sub.add_parser("list-devices", help="list audio capture sources").set_defaults(
+        func=cmd_list_devices)
+
+    p = sub.add_parser("meter", help="show the input level of the system output (or a file)")
+    p.add_argument("--file", help="play this audio file in real time instead of live capture")
+    p.add_argument("--device", help="capture source name (default: config audio.device)")
+    p.add_argument("--seconds", type=float, help="stop after this many seconds")
+    p.set_defaults(func=cmd_meter)
 
     p = sub.add_parser("hold", help="hold channel values on one fixture, e.g. hold mover1 pan=0.2")
     p.add_argument("fixture")

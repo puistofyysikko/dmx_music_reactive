@@ -31,7 +31,7 @@ These are the points where the first draft needs changing before we write code.
 | Topic | Original plan | Decision | Why |
 |-------|---------------|----------|-----|
 | Beat detection | `librosa` | **Custom real-time onset/beat tracker** (spectral flux on bass band + adaptive threshold + tempo-phase tracker). Optional: `aubio` as a comparison baseline. | `librosa.beat` is an offline/batch algorithm; it needs seconds of look-ahead and is slow for streaming. Use librosa only in offline tests/tuning. |
-| Audio capture | `sounddevice` + WASAPI/PulseAudio | **Linux only.** `sounddevice` (or `soundcard`) on the PipeWire/PulseAudio *monitor* source of the default sink; behind an `AudioSource` interface with a WAV-file fallback. | Windows dropped; the abstraction stays so the library can be swapped and tests can use files. |
+| Audio capture | `sounddevice` + WASAPI/PulseAudio | **Linux only.** A `parec` subprocess reading the PipeWire/PulseAudio *monitor* source of the default sink (no PortAudio / Python audio wheel needed), behind an `AudioSource` interface with file and synthetic sources. | Windows dropped. `sounddevice` would need the x86_64 PortAudio system library; `parec` is already installed, follows the sound server's downmix/resample, and is trivial to restart. Decision changed in Phase 3 (2026-10-02). |
 | Linux audio server | PulseAudio | Support **PulseAudio and PipeWire** (pipewire-pulse exposes the same `*.monitor` sources). | Current distros (incl. this dev machine, Fedora) ship PipeWire. |
 | RMS | `numpy.linalg.norm` | `sqrt(mean(x**2))` on float32 frames, converted to dBFS, then normalised with an adaptive (AGC-style) range. | Raw norm scales with frame size; fixed thresholds break with volume changes. Lights must react to *relative* dynamics, not master volume. |
 | DMX rate | 20–30 Hz | **30 Hz default, configurable up to 40 Hz**; always re-send at least 1 Hz as keep-alive. | DMX512 max ≈ 44 Hz for a full universe; many nodes/fixtures time out without refresh. Analysis runs faster than output (see §4). |
@@ -345,7 +345,7 @@ Order change: build the **DMX output and simulator first**, so everything downst
 - Fill in §6 and the JSON profiles from real manuals.
 - **Done when:** our sender alone drives every channel of both fixtures correctly; blackout and home position work.
 
-### Phase 3 — Audio capture
+### Phase 3 — Audio capture  ✅ core done 2026-10-02 (live YouTube/speaker check + 30 min soak pending)
 - `AudioSource` implementations for PipeWire/Pulse monitor, file, synthetic; device listing CLI; level meter script.
 - Spike first: confirm monitor-source capture of YouTube/karaoke audio on the laptop with `sounddevice`, and that it is independent of the output device (speaker/headphones/mixer).
 - **Done when:** meter reacts to system playback with no dropouts for 30 min; callback never blocks.
@@ -442,6 +442,19 @@ Still open:
 ## 13a. Node settings (verified 2026-10-02, firmware V2.2, screenshot in `support/node_config_defaults.png`)
 
 Factory defaults kept: Static IP 192.168.1.20 / 255.255.255.0; Art-Net Net 0, SubNet 0, **Universe 1** (so our config uses `universe: 1`, port-address 1); Port 1 type **DMX Out 40 Hz** (node refreshes at 40 Hz; we send 30 Hz and it repeats the last frame in between). The node also has an sACN universe (= Art-Net address + 1) and a Light'J port, both unused.
+
+## 13c. Phase 3 results (audio capture)
+
+- `src/dmxreactive/audio/`: `PulseMonitorSource` (parec subprocess, bounded queue that drops the oldest block if the consumer lags, auto-restart with back-off, re-opens when the default output changes), `ArraySource`/`FileSource` (ffmpeg decode, real-time pacing), `click_track`/`sine` test signals, `level.py`, `devices.py`, `factory.py`.
+- CLI: `dmxreactive list-devices`, `dmxreactive meter [--file F] [--device D] [--seconds N]`. Config section `audio:` (device, sample_rate 48000, block_size 1024 = 21 ms, latency_ms 20).
+- Verified silently with virtual sinks (`pactl load-module module-null-sink`): tone level read back exactly (−15.03 dBFS for a 0.25-amplitude sine), no dropped blocks, ~46 blocks/s; after switching the default output, the capture reopens on the new sink's monitor within ~1 s and does not leak the old sink's audio.
+- Mixer microphones are not captured (they never touch the laptop); only what the laptop plays.
+- Still to do: live check with real YouTube/karaoke on the speakers, measure capture latency vs. real sound (loopback click test), 30 min soak, behaviour with a USB DAC/mixer as default output.
+
+## 13d. Later hardware measurements (camera)
+
+- User recalls the Sony a6000 may support higher frame rates in some mode; if so, repeat the strobe sweep above 10 Hz (Pot Strobe 10–19 Hz extrapolated, PicoSpot up to 25 Hz) before ever raising `safe_max_hz`.
+- PicoSpot tilt range (200° vs 230°) and gobo list.
 
 ## 13b. Implementation status
 

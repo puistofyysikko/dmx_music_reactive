@@ -9,7 +9,7 @@ description = "Music-reactive DMX lighting over Art-Net"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-dependencies = ["PyYAML>=6"]
+dependencies = ["PyYAML>=6", "numpy>=1.26"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5"]

@@ -4,7 +4,7 @@ Music-reactive DMX lighting. Audio is captured from the sound card's output moni
 
 Target rig: Eurolite DXT PoE Art-Net Node I, Fun Generation PicoSpot 20 LED (moving head) and LED Pot Strobe 100. Linux (Fedora KDE) only. Full plan and fixture channel maps: [PROJECT_MEMO.md](PROJECT_MEMO.md).
 
-**Status:** Phase 0–1 done and hardware-verified (Art-Net output, fixture profiles, fake node, channel walker, strobe calibration tools). Audio capture and analysis are next.
+**Status:** Phase 0–1 done and hardware-verified (Art-Net output, fixture profiles, fake node, channel walker, strobe calibration tools). Phase 3 (audio capture) works; analysis and effects are next.
 
 ## Setup
 
@@ -20,6 +20,8 @@ cp config/config.example.yaml config/config.yaml   # then edit node IP / patch
 .venv/bin/dmxreactive sim                           # fake Art-Net node (no hardware needed)
 .venv/bin/dmxreactive test-fixtures --target 127.0.0.1   # walk all channels against the sim
 .venv/bin/dmxreactive test-fixtures                 # same, against the real node (strobe <= 3 Hz)
+.venv/bin/dmxreactive list-devices                  # audio sources (default output's monitor is marked)
+.venv/bin/dmxreactive meter                         # live level of whatever the laptop is playing
 .venv/bin/pytest                                    # tests
 .venv/bin/ruff check .                              # lint
 .venv/bin/python tools/jitter_check.py 60           # send-timing check

@@ -10,6 +10,12 @@ node:
 output:
   rate_hz: 30             # DMX frame rate; node refresh should be set equal or higher
 
+audio:
+  device: "@DEFAULT_MONITOR@"   # monitor of the current default output (follows speaker/mixer switch)
+  sample_rate: 48000
+  block_size: 1024              # 21 ms per block
+  latency_ms: 20
+
 # Profiles are looked up in config/fixtures/<profile>.json
 fixtures:
   - name: mover1

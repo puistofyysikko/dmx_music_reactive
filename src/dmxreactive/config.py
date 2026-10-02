@@ -22,10 +22,19 @@ class NodeConfig:
 
 
 @dataclass(frozen=True)
+class AudioConfig:
+    device: str = "@DEFAULT_MONITOR@"  # PipeWire/Pulse source; default = monitor of the output
+    sample_rate: int = 48000
+    block_size: int = 1024  # samples per block (1024 @ 48 kHz = 21 ms)
+    latency_ms: int = 20  # capture buffer requested from the sound server
+
+
+@dataclass(frozen=True)
 class Config:
     node: NodeConfig
     rate_hz: float
     patch: Patch
+    audio: AudioConfig = AudioConfig()
 
 
 def load_config(path: str | Path | None = None) -> Config:
@@ -57,4 +66,14 @@ def load_config(path: str | Path | None = None) -> Config:
             )
     except KeyError as exc:
         raise ProfileError(f"{path}: missing key {exc}") from exc
-    return Config(node=node, rate_hz=rate, patch=Patch(fixtures))
+    a = raw.get("audio", {}) or {}
+    defaults = AudioConfig()
+    audio = AudioConfig(
+        device=str(a.get("device", defaults.device)),
+        sample_rate=int(a.get("sample_rate", defaults.sample_rate)),
+        block_size=int(a.get("block_size", defaults.block_size)),
+        latency_ms=int(a.get("latency_ms", defaults.latency_ms)),
+    )
+    if audio.block_size < 256 or audio.sample_rate < 8000:
+        raise ProfileError("audio.block_size must be >= 256 and sample_rate >= 8000")
+    return Config(node=node, rate_hz=rate, patch=Patch(fixtures), audio=audio)
