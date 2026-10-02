@@ -121,3 +121,23 @@ def test_analysis_fits_the_frame_budget():
     feats = run(x)
     per_block_ms = (time.perf_counter() - t0) / len(feats) * 1000
     assert per_block_ms < 8.0  # budget is 21 ms per block; stay well under half
+
+
+def test_beat_lock_on_steady_clicks_but_not_on_random_ones():
+    steady = run(click_track(140, 30.0, SR))
+    assert steady[-1].beat_locked
+    # same number of clicks at random times: periodicity-free, must not lock for long
+    rng = np.random.default_rng(3)
+    x = np.zeros(SR * 40, dtype=np.float32)
+    click = click_track(60, 1.0, SR)[: int(0.04 * SR)]
+    for t in np.sort(rng.uniform(0, 38, 90)):
+        i = int(t * SR)
+        x[i:i + len(click)] += click
+    random_feats = [f for f in run(x) if f.t > 15]
+    assert np.mean([f.beat_locked for f in random_feats]) < 0.25
+
+
+def test_beat_lock_clears_in_silence():
+    feats = run(np.concatenate([click_track(140, 20.0, SR), np.zeros(SR * 4, dtype=np.float32)]))
+    assert feats[int(19 * SR / BLOCK)].beat_locked
+    assert not feats[-1].beat_locked

@@ -28,7 +28,8 @@ class Features:
     beat_phase: float  # 0 at a beat, rising to 1 just before the next
     beat: bool
     beat_count: int
-    beat_confidence: float  # 0..1
+    beat_confidence: float  # 0..1 (strength of the periodicity; see beat_locked for trust)
+    beat_locked: bool  # True when kicks consistently fall on the predicted beat grid
     energy_trend: float  # -1 falling (breakdown) .. +1 rising (build-up)
 
     def band(self, name: str) -> float:

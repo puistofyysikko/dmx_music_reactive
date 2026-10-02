@@ -12,6 +12,10 @@ from dmxreactive.audio.level import rms_dbfs
 FFT_SIZE = 2048
 BAND_EDGES_HZ = ((20, 150), (150, 500), (500, 2000), (2000, 8000), (8000, 16000))
 SILENCE_DB = -65.0
+LOCK_WINDOW_MS = 60.0  # a kick within this (or 15 % of the beat period, if shorter) of a
+#                         predicted beat counts as on the grid; chance level is then ~0.2-0.25
+LOCK_ALPHA = 0.12  # coherence smoothing per kick (~ last 8 kicks)
+LOCK_ON, LOCK_OFF = 0.5, 0.3
 FLUX_WEIGHTS = (1.5, 1.0, 0.7, 0.5, 0.0)  # how much each band feeds the tempo envelope
 
 
@@ -39,6 +43,8 @@ class Analyzer:
         self._kick_count = self._hat_count = self._beat_count = 0
         self._silent_frames = 0
         self._level_fast = self._level_slow = 0.0
+        self._coherence = 0.0  # share of recent kicks that fell on the beat grid
+        self._locked = False
 
     def process(self, block: np.ndarray) -> Features:
         n = len(block)
@@ -81,6 +87,18 @@ class Analyzer:
         # result is gated by silence.
         kick = self._kick(float(fluxes_arr[0])) and not silent_now
         hat = self._hat(float(fluxes_arr[3])) and not silent_now
+        # Beat-lock: do kicks land on the predicted grid? (a ballad or free rhythm: no)
+        if kick and beat_state.bpm > 0:
+            period_ms = 60000.0 / beat_state.bpm
+            miss_ms = min(beat_state.phase, 1.0 - beat_state.phase) * period_ms
+            window_ms = min(LOCK_WINDOW_MS, 0.15 * period_ms)
+            self._coherence += LOCK_ALPHA * ((miss_ms < window_ms) - self._coherence)
+        if beat_state.bpm == 0:
+            self._coherence, self._locked = 0.0, False
+        elif self._coherence >= LOCK_ON:
+            self._locked = True
+        elif self._coherence < LOCK_OFF:
+            self._locked = False
         self._kick_count += kick
         self._hat_count += hat
         self._beat_count += beat_state.beat
@@ -111,5 +129,6 @@ class Analyzer:
             beat=beat_state.beat,
             beat_count=self._beat_count,
             beat_confidence=beat_state.confidence,
+            beat_locked=self._locked,
             energy_trend=float(np.clip((self._level_fast - self._level_slow) * 4.0, -1.0, 1.0)),
         )

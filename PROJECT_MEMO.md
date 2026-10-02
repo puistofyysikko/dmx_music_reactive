@@ -473,6 +473,15 @@ Measured on the user's tracks (`support/tracks/`, git-ignored):
 | Poison (Tune Up Remix) | 140.0 BPM | 143.6 | F1 0.90 (librosa's tempo grid is coarse) |
 | Technoboy & Isaac – Digital Playground | 150.0 BPM; holds through breakdowns; 0 BPM at the silent tail | 152 | F1 0.59 overall because librosa locks to the off-beat (+176 ms) for ~40 s; ours stays on the kicks (88 % within 50 ms) |
 
+**Live recordings (2026-10-02, `dmxreactive record` of YouTube playback, analysed offline):**
+
+| Clip | Result |
+|------|--------|
+| Falco – Out Of The Dark (Daniel Cain hardstyle remix) | 155 BPM, stable, beat F1 0.99 vs librosa, 77 % of beats within 60 ms of a kick, beat-locked 98 % of the time |
+| Umberto Tozzi & Monica Bellucci – Ti Amo | **no steady tempo**: tempo hops 90 → 120 → 180 BPM; autocorrelation shows the strongest periodicity at **60 BPM** (1 s) plus weaker 90 and ~178 — a slow ballad with triplet (12/8) feel and no steady kick; only 24 % of beats near a kick; beat-locked 38 % (mostly only in the last 20 s) |
+
+Conclusion: widening the tempo range (min 50–55 BPM, other priors) did **not** fix Ti Amo and broke 174/190 BPM click tracks, so the 70–200 BPM range / centre 140 prior stays. The fix is semantic: a new **`beat_locked`** feature (kicks must fall on the predicted grid: share of the last ~8 kicks within min(60 ms, 15 % of the period), lock at ≥ 0.5, unlock < 0.3; chance level ≈ 0.2–0.25). Locked fractions after 12 s: karaoke 94 %, Poison 94 %, Falco 98 %, Digital Playground 66 %, Timeless 62 % (unlocks in breakdowns/outro), Ti Amo 38 %. **Effect-engine rule (Phase 5/6): beat-synced effects (strobe on beat, chases) only when `beat_locked`; otherwise fall back to level/band-following and slow ambient motion.** `beat_confidence` alone is not a reliable trust signal (Falco 0.54 vs Ti Amo 0.43).
+
 CPU: ≈ 3.1 ms per block (≈ 15 % of one core; budget 21 ms). Known weak spots: the first ~5–15 s of a track (lock-in; confidence is low until then), kick events fire slightly more often than beats in rolling-bass sections, no downbeat/bar detection yet (Phase 6 candidate).
 
 ## 13d. Later hardware measurements (camera)

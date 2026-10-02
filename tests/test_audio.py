@@ -148,13 +148,17 @@ def test_live_capture_from_virtual_sink(tmp_path):
         src.start()
         player = subprocess.Popen(["paplay", "--device=dmxreactive_test", str(wav)])
         try:
-            levels = [rms_dbfs(b) for b in (src.read(2) for _ in range(60)) if b is not None]
+            levels, end = [], time.monotonic() + 4.5  # the 3 s tone plus silence after it
+            while time.monotonic() < end:
+                block = src.read(0.5)
+                if block is not None:
+                    levels.append(rms_dbfs(block))
         finally:
             player.wait(timeout=10)
             src.stop()
-        assert len(levels) > 40
+        assert len(levels) > 150
         # 0.25-amplitude sine -> RMS -15 dBFS; the loud middle of the capture must show it
         assert max(levels) == pytest.approx(-15.05, abs=1.0)
-        assert min(levels) < -60  # silence before/after playback
+        assert min(levels) < -60  # silence after playback ends
     finally:
         subprocess.run(["pactl", "unload-module", mod], check=False)

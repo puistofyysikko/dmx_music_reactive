@@ -191,7 +191,8 @@ def cmd_analyze(args) -> int:
                 last_print = now
                 bands = "".join(_spark(v) for v in f.bands)
                 line = (f"level {_spark(f.level)}{_spark(f.level)} bands {bands}  "
-                        f"BPM {f.bpm:5.1f} conf {f.beat_confidence:3.0%}  "
+                        f"BPM {f.bpm:5.1f} conf {f.beat_confidence:3.0%} "
+                        f"{'LOCKED' if f.beat_locked else 'free  '}  "
                         f"{'BEAT' if f.t - beat_t < 0.1 else '    '} "
                         f"{'KICK' if f.t - kick_t < 0.1 else '    '} "
                         f"{'(silent)' if f.silent else '        '} trend {f.energy_trend:+.1f}")
