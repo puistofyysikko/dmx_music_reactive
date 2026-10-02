@@ -205,6 +205,37 @@ def cmd_analyze(args) -> int:
     return 0
 
 
+def cmd_record(args) -> int:
+    """Record what the capture hears (system output) to a 16-bit mono WAV for offline analysis."""
+    import wave
+
+    import numpy as np
+
+    from dmxreactive.audio.factory import create_source
+
+    config = load_config(args.config)
+    source = create_source(config.audio, args.file, args.device)
+    source.start()
+    t0 = time.monotonic()
+    print(f"Recording {args.seconds:g} s to {args.output} "
+          "(play the music now; Ctrl-C = stop early)")
+    try:
+        with wave.open(args.output, "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(config.audio.sample_rate)
+            while time.monotonic() - t0 < args.seconds:
+                block = source.read(1.0)
+                if block is not None:
+                    wav.writeframes((np.clip(block, -1, 1) * 32767).astype("<i2").tobytes())
+    except (KeyboardInterrupt, EOFError):
+        pass
+    finally:
+        source.stop()
+    print(f"Saved {args.output} ({source.stats.blocks} blocks, dropped {source.stats.dropped})")
+    return 0
+
+
 def cmd_hold(args) -> int:
     """Hold fixed channel values on one fixture (bring-up/debugging), then blackout."""
     config = load_config(args.config)
@@ -267,6 +298,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--device", help="capture source name (default: config audio.device)")
     p.add_argument("--seconds", type=float, help="stop after this many seconds")
     p.set_defaults(func=cmd_analyze)
+
+    p = sub.add_parser("record", help="record the system output to a WAV (for offline analysis)")
+    p.add_argument("output", help="WAV path, e.g. support/tracks/live_falco.wav")
+    p.add_argument("--seconds", type=float, default=60.0)
+    p.add_argument("--file", help=argparse.SUPPRESS)
+    p.add_argument("--device", help="capture source name (default: config audio.device)")
+    p.set_defaults(func=cmd_record)
 
     sub.add_parser("list-devices", help="list audio capture sources").set_defaults(
         func=cmd_list_devices)

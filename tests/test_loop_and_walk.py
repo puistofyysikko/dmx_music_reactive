@@ -77,3 +77,23 @@ def test_cli_check_config_and_bad_config(capsys):
     assert main(["--config", EXAMPLE, "check-config"]) == 0
     assert "PicoSpot 20 LED" in capsys.readouterr().out
     assert main(["--config", "/nonexistent.yaml", "check-config"]) == 2
+
+
+def test_record_writes_a_wav(tmp_path):
+    import wave
+
+    out = tmp_path / "rec.wav"
+    src = tmp_path / "src.wav"
+    import numpy as np
+
+    from dmxreactive.audio.array_source import sine
+    with wave.open(str(src), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(48000)
+        w.writeframes((sine(440, 3.0) * 32767).astype(np.int16).tobytes())
+    args = ["--config", EXAMPLE, "record", str(out), "--seconds", "1", "--file", str(src)]
+    assert main(args) == 0
+    with wave.open(str(out)) as w:
+        assert w.getframerate() == 48000 and w.getnchannels() == 1
+        assert 40000 < w.getnframes() < 50000
