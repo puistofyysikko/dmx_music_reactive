@@ -1,6 +1,6 @@
 # DMX Music-Reactive Lighting — Project Memo (v2)
 
-Status: **planning** · Branch: `create/foundation` · Supersedes: `dmx_music_reactive_project_plan.md` (kept as the original draft)
+Status: **Phases 0–5 built and committed (software verified; first supervised real-rig run of the live show pending)** · Last updated 2026-10-02 · Branch: `create/foundation` · Supersedes: `dmx_music_reactive_project_plan.md` (kept as the original draft)
 
 ---
 
@@ -510,9 +510,26 @@ Not yet verified on the real rig: end-to-end latency (audio → light; `beat_lea
 - Strobe mappings measured with camera (§6.2); safety caps in Hz (`safe_max_hz`).
 - Hardware verified 2026-10-02: node, both fixtures, channel walk, strobe rates. Still open: PicoSpot tilt range (200° vs 230°), gobo list, 10-minute jitter soak on the real network.
 
-## 14. Immediate next steps
+## 14. Where we are and what comes next (updated 2026-10-02, end of day 1)
 
-1. Phase 0: scaffold repo (`pyproject.toml`, layout from §7, `config.example.yaml` with the patch from §6.3).
-2. Phase 1: Art-Net sender + fake node receiver + fixture profiles for the two fixtures (JSON from §6) + unit tests – no hardware needed.
-3. In parallel: configure the dongle's static IP profile, power the node (USB-C), open its web page, confirm Net/SubNet/Universe, test with QLC+ (Fedora: `dnf install qlcplus`; it has Art-Net output and fixture definitions for both lights in its library or OFL).
-4. Phase 3 spike: find the monitor source with `pactl list short sources`, check that a 30 s capture of YouTube works with `sounddevice`.
+### Done today (all committed, 75 tests green)
+| Phase | State |
+|-------|-------|
+| 0 Repo scaffold | done |
+| 1 Art-Net output, fixture profiles, fake node, channel walker | done, **hardware-verified** (node, PicoSpot, Pot Strobe; strobe mappings measured by camera) |
+| 3 Audio capture (PipeWire monitor via `parec`) | done, verified live (YouTube, 46.7 blocks/s, 0 drops) |
+| 4 Analysis (bands, kicks, tempo/beat, `beat_locked`) | done, verified on 4 tracks + 2 live recordings |
+| 5 Show engine + live runtime (`dmxreactive run`) | done in software, simulated on real tracks, real-time run against the fake node; **not yet run on the real rig** |
+
+Key findings to remember: PicoSpot speed channel is inverted (0 = fast); Pot Strobe strobe period is linear in DMX value; beat-synced effects only when `beat_locked` (Ti Amo is a 12/8-feel ballad with no steady kick → ambient scene); `beat_lead_ms` (30) is a guess until measured.
+
+### Tomorrow — suggested order
+1. **Supervised first live run on the real rig** (user at the rig; beam away from faces):
+   `dmxreactive run --scene ambient`, then `dmxreactive run` with Falco/Timeless; try keys `b s a 1 2 + -`; Ctrl-C leaves everything dark. Collect feedback: flash timing early/late, mover speed/jerkiness, strobe brightness at master 0.8, ambient look on Ti Amo, colour change pacing. Adjust `show:` config values accordingly.
+2. **Measure end-to-end latency** (audio → light) with the camera (high-fps mode if the a6000 allows, else phone 240 fps) and set `beat_lead_ms` from data (§13d).
+3. **Phase 6 (mood engine, scenes, polish):** build-up → drop detection (energy trend + bass return) with a white flash/strobe burst within the cap; karaoke-friendly scene; more colour logic (bands/centroid → palette, warm for quiet, cool for loud); optional downbeat/bar detection for colour changes on the "one"; tap-tempo override; scene presets in config; a terminal status display (TUI) with DMX preview.
+4. **Launch/ops:** `scripts/run.sh` desktop launcher, event checklist rehearsal (§11), 30 min–3 h soak run (memory, jitter, dropped blocks), behaviour with the USB DAC/mixer as default output, audio device unplug/replug.
+5. **Small open items:** PicoSpot tilt range (200° vs 230°) and gobo list; high-fps strobe re-measurement (10–25 Hz); `git config user.name/email` is unset on this machine (commits so far use `tapsu <dudet.touko@gmail.com>` via per-command `-c`); decide whether to add the light browser GUI after Phase 6.
+
+### Commands cheat-sheet
+`dmxreactive check-config | sim | test-fixtures | hold | strobe-sweep | list-devices | meter | analyze | record | run` (see README). Tools: `tools/analyze_track.py`, `tools/simulate_show.py`, `tools/click_eval.py`, `tools/strobe_analyze.py`, `tools/jitter_check.py`. Local-only files (git-ignored): `config/config.yaml`, `support/tracks/` (user's test tracks + live recordings), camera clips in `support/`.
