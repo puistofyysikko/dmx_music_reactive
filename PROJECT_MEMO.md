@@ -355,7 +355,7 @@ Order change: build the **DMX output and simulator first**, so everything downst
 - Offline harness vs. labelled tracks (build a small test set: 5–8 tracks across genres + click tracks).
 - **Done when:** onset F-measure and beat hit-rate meet §1 targets on the test set; analysis uses < 15 % of a core; unit tests on synthetic click tracks pass (BPM ±1).
 
-### Phase 5 — Effects + integration
+### Phase 5 — Effects + integration  ✅ software done 2026-10-02 (real-rig run pending)
 - First effect: strobe on kick. Then colour wash from centroid/bands, moving-head sweeps tied to `beat_phase`.
 - Wire everything in `app.py`, safety layer in place from day one.
 - Latency measurement tool (see §10).
@@ -483,6 +483,20 @@ Measured on the user's tracks (`support/tracks/`, git-ignored):
 Conclusion: widening the tempo range (min 50–55 BPM, other priors) did **not** fix Ti Amo and broke 174/190 BPM click tracks, so the 70–200 BPM range / centre 140 prior stays. The fix is semantic: a new **`beat_locked`** feature (kicks must fall on the predicted grid: share of the last ~8 kicks within min(60 ms, 15 % of the period), lock at ≥ 0.5, unlock < 0.3; chance level ≈ 0.2–0.25). Locked fractions after 12 s: karaoke 94 %, Poison 94 %, Falco 98 %, Digital Playground 66 %, Timeless 62 % (unlocks in breakdowns/outro), Ti Amo 38 %. **Effect-engine rule (Phase 5/6): beat-synced effects (strobe on beat, chases) only when `beat_locked`; otherwise fall back to level/band-following and slow ambient motion.** `beat_confidence` alone is not a reliable trust signal (Falco 0.54 vs Ti Amo 0.43).
 
 CPU: ≈ 3.1 ms per block (≈ 15 % of one core; budget 21 ms). Known weak spots: the first ~5–15 s of a track (lock-in; confidence is low until then), kick events fire slightly more often than beats in rolling-bass sections, no downbeat/bar detection yet (Phase 6 candidate).
+
+## 13c-3. Phase 5 results (show engine + live runtime)
+
+Code: `engine/show.py` (Show: scenes, mood switching, safety, hotkeys; pure logic, no I/O), `engine/primitives.py`, `engine/sim.py` (deterministic offline simulation), `live.py` (analysis thread + 30 Hz render loop + keys), `control/keys.py`; CLI `dmxreactive run [--file F] [--target host:port] [--scene auto|beat|ambient] [--seconds N]`; config section `show:`; tools `tools/simulate_show.py FILE --plot out.png`.
+
+Behaviour:
+- **Scenes:** `ambient` (default, no reliable beat): mover breathes with loudness, slow pan/tilt wander (45 s / 31 s periods), slow colour drift (20 s), strobe light dark. `beat` (when `beat_locked`): Pot Strobe flashes on every predicted grid beat (dimmer pulse, 70 ms decay, fired `beat_lead_ms`=30 ms early using the phase extrapolated to "now"); mover pulses on the beat, pan/tilt paced by beats (16/11-beat periods), colour changes every 8 beats. Auto mood switch: ambient→beat after lock ≥ 2 s and ≥ 6 s dwell; beat→ambient after unlock ≥ 4 s; 1.5 s crossfade.
+- **Safety:** flash rate limiter (`max_flash_hz` ≤ 10, default 8) applied to every flash; built-in strobe channels are never used (forced off); pan/tilt limited to `pan_limits`/`tilt_limits` with slew limiting (0.8 /s); colour wheel changes ≥ 1.5 s apart; `master` ceiling; silence or lost audio fades all dimmers to 0 (2 s); blackout key immediate; every exit path sends blackout frames.
+- **Hotkeys:** `b` blackout toggle, `s` strobe light on/off, `a` auto, `1` force beat, `2` force ambient, `+`/`-` master, Ctrl-C quit.
+- Analysis exceptions are caught per frame (lights stay alive); render loop never blocks on audio.
+
+Verification (no hardware): 13 show tests (scene switching, flash timing vs true clicks within ~1 frame, rate cap, no flashing without lock, silence/no-audio dark, blackout/strobe keys, limits, colour rate limit, crossfade, <1 ms per tick); simulation on user tracks — Falco 87 % beat scene, 2.7 Hz max flash rate; Timeless 72 %; karaoke 81 %; Ti Amo 27 %; real-time end-to-end run against the fake node: 30.2 packets/s, 0 sequence gaps, final frame blackout, ~25 % of one core for the whole pipeline.
+
+Not yet verified on the real rig: end-to-end latency (audio → light; `beat_lead_ms` is a guess), how the movement/colour pacing looks, flash brightness at `master` 0.8.
 
 ## 13d. Later hardware measurements (camera)
 

@@ -16,6 +16,17 @@ audio:
   block_size: 1024              # 21 ms per block
   latency_ms: 20
 
+show:
+  beat_lead_ms: 30        # fire beat effects this much early to cancel pipeline latency (tune by camera)
+  max_flash_hz: 8         # hard cap on dimmer-pulse flashes per second (<= 10)
+  flash_decay_ms: 70
+  master: 0.8             # overall brightness ceiling (+/- keys change it live)
+  pan_limits: [0.2, 0.8]  # normalised range the moving head may use (keep the beam off faces)
+  tilt_limits: [0.3, 0.8]
+  scene: auto             # auto | beat | ambient
+  colour_hold_s: 1.5      # min time between colour-wheel changes (mechanical)
+  silence_fade_s: 2.0
+
 # Profiles are looked up in config/fixtures/<profile>.json
 fixtures:
   - name: mover1

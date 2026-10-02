@@ -9,6 +9,7 @@ import yaml
 
 from dmxreactive.dmx.artnet import ARTNET_PORT
 from dmxreactive.dmx.profiles import Fixture, FixtureProfile, Patch, ProfileError
+from dmxreactive.engine.show import ShowConfig
 
 DEFAULT_CONFIG = Path("config/config.yaml")
 EXAMPLE_CONFIG = Path("config/config.example.yaml")
@@ -35,6 +36,7 @@ class Config:
     rate_hz: float
     patch: Patch
     audio: AudioConfig = AudioConfig()
+    show: ShowConfig = ShowConfig()
 
 
 def load_config(path: str | Path | None = None) -> Config:
@@ -76,4 +78,28 @@ def load_config(path: str | Path | None = None) -> Config:
     )
     if audio.block_size < 256 or audio.sample_rate < 8000:
         raise ProfileError("audio.block_size must be >= 256 and sample_rate >= 8000")
-    return Config(node=node, rate_hz=rate, patch=Patch(fixtures), audio=audio)
+    sh = raw.get("show", {}) or {}
+    d = ShowConfig()
+
+    def pair(key: str, default: tuple[float, float]) -> tuple[float, float]:
+        lo, hi = (float(v) for v in sh.get(key, default))
+        if not 0.0 <= lo < hi <= 1.0:
+            raise ProfileError(f"show.{key} must be [lo, hi] with 0 <= lo < hi <= 1")
+        return lo, hi
+
+    show = ShowConfig(
+        beat_lead_ms=float(sh.get("beat_lead_ms", d.beat_lead_ms)),
+        max_flash_hz=float(sh.get("max_flash_hz", d.max_flash_hz)),
+        flash_decay_ms=float(sh.get("flash_decay_ms", d.flash_decay_ms)),
+        master=float(sh.get("master", d.master)),
+        pan_limits=pair("pan_limits", d.pan_limits),
+        tilt_limits=pair("tilt_limits", d.tilt_limits),
+        scene=str(sh.get("scene", d.scene)),
+        colour_hold_s=float(sh.get("colour_hold_s", d.colour_hold_s)),
+        silence_fade_s=float(sh.get("silence_fade_s", d.silence_fade_s)),
+    )
+    if not 0.0 < show.max_flash_hz <= 10.0:
+        raise ProfileError("show.max_flash_hz must be in (0, 10]")
+    if show.scene not in ("auto", "beat", "ambient"):
+        raise ProfileError("show.scene must be auto, beat or ambient")
+    return Config(node=node, rate_hz=rate, patch=Patch(fixtures), audio=audio, show=show)

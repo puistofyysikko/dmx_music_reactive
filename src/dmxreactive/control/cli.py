@@ -237,6 +237,23 @@ def cmd_record(args) -> int:
     return 0
 
 
+def cmd_run(args) -> int:
+    """Run the live show: capture -> analysis -> effects -> lights."""
+    from dmxreactive.audio.factory import create_source
+    from dmxreactive.live import run_live
+
+    config = load_config(args.config)
+    host, _, port = (args.target or "").partition(":")
+    source = create_source(config.audio, args.file, args.device, loop=args.loop)
+    where = f"{host or config.node.host}:{port or config.node.port}"
+    print(f"Live show -> {where}  ({'file ' + args.file if args.file else 'live capture'}). "
+          "Strobe flashes are capped; blackout key: b; quit: Ctrl-C.")
+    show = run_live(config, source, host or None, int(port) if port else None,
+                    args.seconds, keys=not args.no_keys, scene=args.scene)
+    print(f"Done, blackout sent. Flash events fired: {show.flashes}")
+    return 0
+
+
 def cmd_hold(args) -> int:
     """Hold fixed channel values on one fixture (bring-up/debugging), then blackout."""
     config = load_config(args.config)
@@ -306,6 +323,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--file", help=argparse.SUPPRESS)
     p.add_argument("--device", help="capture source name (default: config audio.device)")
     p.set_defaults(func=cmd_record)
+
+    p = sub.add_parser("run", help="run the live music-reactive show")
+    p.add_argument("--file", help="drive the show from this audio file instead of live capture")
+    p.add_argument("--loop", action="store_true", help="loop the --file")
+    p.add_argument("--device", help="capture source name (default: config audio.device)")
+    p.add_argument("--target", help="override node as host[:port], e.g. 127.0.0.1:16454 for sim")
+    p.add_argument("--seconds", type=float, help="stop after this many seconds")
+    p.add_argument("--scene", choices=["auto", "beat", "ambient"], help="force a scene")
+    p.add_argument("--no-keys", action="store_true", help="disable hotkeys")
+    p.set_defaults(func=cmd_run)
 
     sub.add_parser("list-devices", help="list audio capture sources").set_defaults(
         func=cmd_list_devices)
