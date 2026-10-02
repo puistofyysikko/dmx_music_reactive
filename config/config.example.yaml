@@ -1,0 +1,22 @@
+# Copy to config/config.yaml (git-ignored) and adjust.
+
+node:
+  host: 192.168.1.20      # Eurolite DXT PoE Art-Net Node I (factory IP, sticker on the underside)
+  port: 6454
+  net: 0                  # Art-Net Net / SubNet / Universe as set on the node's web page
+  subnet: 0
+  universe: 1             # node factory default is Art-Net Universe 1 (Port 1)
+
+output:
+  rate_hz: 30             # DMX frame rate; node refresh should be set equal or higher
+
+# Profiles are looked up in config/fixtures/<profile>.json
+fixtures:
+  - name: mover1
+    profile: picospot20_9ch
+    address: 1
+    group: movers
+  - name: strobe1
+    profile: potstrobe100_3ch
+    address: 10
+    group: strobes

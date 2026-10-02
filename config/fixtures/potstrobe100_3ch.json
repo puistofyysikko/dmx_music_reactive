@@ -1,0 +1,14 @@
+{
+  "id": "fun-generation-led-pot-strobe-100-3ch",
+  "manufacturer": "Fun Generation",
+  "model": "LED Pot Strobe 100",
+  "mode": "3ch",
+  "channel_count": 3,
+  "channels": [
+    { "offset": 0, "name": "dimmer", "kind": "continuous", "default": 0.0 },
+    { "offset": 1, "name": "mode",   "kind": "fixed", "value": 0 },
+    { "offset": 2, "name": "strobe", "kind": "rate", "off": 0, "dmx_range": [2, 255],
+      "period_ms": [1453.1, 52.6], "safe_max_hz": 10, "default": 0.0 }
+  ],
+  "blackout": { "dimmer": 0.0, "strobe": 0.0 }
+}

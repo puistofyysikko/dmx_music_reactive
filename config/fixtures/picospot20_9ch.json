@@ -1,0 +1,20 @@
+{
+  "id": "fun-generation-picospot-20-led-9ch",
+  "manufacturer": "Fun Generation",
+  "model": "PicoSpot 20 LED",
+  "mode": "9ch",
+  "channel_count": 9,
+  "channels": [
+    { "offset": 0, "name": "pan",   "kind": "continuous", "fine_offset": 2, "default": 0.5 },
+    { "offset": 1, "name": "tilt",  "kind": "continuous", "fine_offset": 3, "default": 0.5 },
+    { "offset": 4, "name": "speed", "kind": "continuous", "dmx_range": [255, 0], "default": 1.0 },
+    { "offset": 5, "name": "color", "kind": "select", "default": "white",
+      "slots": { "white": 5, "red": 16, "orange": 27, "yellow": 38,
+                 "green": 49, "blue": 60, "cyan": 71, "purple": 82 } },
+    { "offset": 6, "name": "gobo",  "kind": "continuous", "dmx_range": [0, 124], "default": 0.0 },
+    { "offset": 7, "name": "dimmer", "kind": "continuous", "default": 0.0 },
+    { "offset": 8, "name": "strobe", "kind": "rate", "off": 0, "dmx_range": [10, 255],
+      "hz_range": [1, 25], "safe_max_hz": 10, "default": 0.0 }
+  ],
+  "blackout": { "dimmer": 0.0, "strobe": 0.0 }
+}
