@@ -155,6 +155,56 @@ def cmd_meter(args) -> int:
     return 0
 
 
+_BLOCKS = " ▁▂▃▄▅▆▇█"
+
+
+def _spark(v: float) -> str:
+    return _BLOCKS[round(max(0.0, min(1.0, v)) * (len(_BLOCKS) - 1))]
+
+
+def cmd_analyze(args) -> int:
+    """Live view of what the analyser hears: level, bands, tempo, beat and kick markers."""
+    from dmxreactive.analysis.analyzer import Analyzer
+    from dmxreactive.audio.factory import create_source
+
+    config = load_config(args.config)
+    source = create_source(config.audio, args.file, args.device)
+    analyzer = Analyzer(config.audio.sample_rate, config.audio.block_size)
+    tty = sys.stdout.isatty()
+    print(f"Analyser ({'file ' + args.file if args.file else 'live capture'}); "
+          f"bands: bass lowmid mid high air.  Ctrl-C to stop")
+    source.start()
+    t0 = last_print = time.monotonic()
+    beat_t = kick_t = -1.0
+    n = 0
+    try:
+        while args.seconds is None or time.monotonic() - t0 < args.seconds:
+            block = source.read(1.0)
+            if block is None:
+                continue
+            f = analyzer.process(block)
+            n += 1
+            beat_t = f.t if f.beat else beat_t
+            kick_t = f.t if f.kick else kick_t
+            now = time.monotonic()
+            if now - last_print >= (0.066 if tty else 0.5):
+                last_print = now
+                bands = "".join(_spark(v) for v in f.bands)
+                line = (f"level {_spark(f.level)}{_spark(f.level)} bands {bands}  "
+                        f"BPM {f.bpm:5.1f} conf {f.beat_confidence:3.0%}  "
+                        f"{'BEAT' if f.t - beat_t < 0.1 else '    '} "
+                        f"{'KICK' if f.t - kick_t < 0.1 else '    '} "
+                        f"{'(silent)' if f.silent else '        '} trend {f.energy_trend:+.1f}")
+                print("\r" + line if tty else line, end="" if tty else "\n", flush=True)
+    except (KeyboardInterrupt, EOFError):
+        pass
+    finally:
+        source.stop()
+    print(f"\n{n} blocks analysed, dropped {source.stats.dropped}, "
+          f"restarts {source.stats.restarts}")
+    return 0
+
+
 def cmd_hold(args) -> int:
     """Hold fixed channel values on one fixture (bring-up/debugging), then blackout."""
     config = load_config(args.config)
@@ -211,6 +261,12 @@ def main(argv: list[str] | None = None) -> int:
                    help="calibration only: raise the DMX cap above the profile's safe limit")
     p.add_argument("--target")
     p.set_defaults(func=cmd_strobe_sweep)
+
+    p = sub.add_parser("analyze", help="live view of level, bands, tempo, beats and kicks")
+    p.add_argument("--file", help="play this audio file in real time instead of live capture")
+    p.add_argument("--device", help="capture source name (default: config audio.device)")
+    p.add_argument("--seconds", type=float, help="stop after this many seconds")
+    p.set_defaults(func=cmd_analyze)
 
     sub.add_parser("list-devices", help="list audio capture sources").set_defaults(
         func=cmd_list_devices)

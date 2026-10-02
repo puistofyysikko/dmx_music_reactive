@@ -4,7 +4,7 @@ Music-reactive DMX lighting. Audio is captured from the sound card's output moni
 
 Target rig: Eurolite DXT PoE Art-Net Node I, Fun Generation PicoSpot 20 LED (moving head) and LED Pot Strobe 100. Linux (Fedora KDE) only. Full plan and fixture channel maps: [PROJECT_MEMO.md](PROJECT_MEMO.md).
 
-**Status:** Phase 0–1 done and hardware-verified (Art-Net output, fixture profiles, fake node, channel walker, strobe calibration tools). Phase 3 (audio capture) works; analysis and effects are next.
+**Status:** Phase 0–1 done and hardware-verified (Art-Net output, fixture profiles, fake node, channel walker, strobe calibration tools). Phase 3 (audio capture) and Phase 4 (analysis: bands, kicks, tempo/beat tracking) work; effects wiring to the lights is next.
 
 ## Setup
 
@@ -22,7 +22,10 @@ cp config/config.example.yaml config/config.yaml   # then edit node IP / patch
 .venv/bin/dmxreactive test-fixtures                 # same, against the real node (strobe <= 3 Hz)
 .venv/bin/dmxreactive list-devices                  # audio sources (default output's monitor is marked)
 .venv/bin/dmxreactive meter                         # live level of whatever the laptop is playing
-.venv/bin/pytest                                    # tests
+.venv/bin/dmxreactive analyze                       # live view: bands, BPM, beat/kick markers
+.venv/bin/dmxreactive analyze --file song.mp3       # same on a file, played in real time
+.venv/bin/python tools/analyze_track.py song.mp3 --plot out.png --reference   # offline report (needs librosa, matplotlib)
+.venv/bin/pytest                                    # tests (~45 s)
 .venv/bin/ruff check .                              # lint
 .venv/bin/python tools/jitter_check.py 60           # send-timing check
 ```

@@ -350,7 +350,7 @@ Order change: build the **DMX output and simulator first**, so everything downst
 - Spike first: confirm monitor-source capture of YouTube/karaoke audio on the laptop with `sounddevice`, and that it is independent of the output device (speaker/headphones/mixer).
 - **Done when:** meter reacts to system playback with no dropouts for 30 min; callback never blocks.
 
-### Phase 4 — Analysis
+### Phase 4 — Analysis  ✅ core done 2026-10-02 (live listening check pending)
 - Windowed FFT, bands, adaptive normalisation, onset detector, tempo/phase tracker.
 - Offline harness vs. labelled tracks (build a small test set: 5–8 tracks across genres + click tracks).
 - **Done when:** onset F-measure and beat hit-rate meet §1 targets on the test set; analysis uses < 15 % of a core; unit tests on synthetic click tracks pass (BPM ±1).
@@ -451,6 +451,29 @@ Factory defaults kept: Static IP 192.168.1.20 / 255.255.255.0; Art-Net Net 0, Su
 - Mixer microphones are not captured (they never touch the laptop); only what the laptop plays.
 - Live check done by user 2026-10-02: 30 s of real playback → 46.7 blocks/s (expected 46.9), 0 dropped, 0 restarts, signal around −23 dBFS RMS.
 - Still to do: measure capture latency vs. real sound (loopback click test), 30 min soak, behaviour with a USB DAC/mixer as default output.
+
+## 13c-2. Phase 4 results (analysis)
+
+Code: `src/dmxreactive/analysis/` — `analyzer.py` (2048-pt Hann FFT every 1024-sample block = 46.9 frames/s), `dsp.py` (AdaptiveNorm, PeakNorm, OnsetDetector), `tempo.py` (comb-filter tempo/phase tracker with tempo prior and hysteresis), `features.py` (`Features`: level, 5 bands, centroid, flux, kick/hat events, bpm, beat_phase, beat, confidence, energy_trend; events carry monotonic counters so the 30 Hz render loop never misses one).
+Tools: `dmxreactive analyze [--file F]` (live terminal view), `tools/analyze_track.py FILE --plot out.png --reference` (offline report, librosa comparison), `tools/click_eval.py` (synthetic ground truth).
+
+Design decisions:
+- **Beats are predicted from a free-running phase** locked to the onset envelope every ~0.13 s (best tempo/phase over the last 8 s), so a weak or missing kick doesn't drop a beat and breakdowns keep the grid. Tempo prior: log-normal, centre 140 BPM, σ 0.7 octave, range 70–200 BPM. Once a tempo has been confident for ~2 s, switching needs ~1.8 s of consistent evidence and 30 % better score (prevents breakdown flips).
+- **Volume independence:** bands/level normalise against a decaying per-band peak (level: 24 dB range, bands: 30 dB, floors −60/−90 dB), flux against a decaying peak. Silence (< −65 dBFS for > 1 s) resets the tempo and gates all events.
+- Kick = adaptive-threshold onset on the bass-band flux (refractory 120 ms); hat = same on the high band.
+
+Measured (click tracks, ground truth): BPM exact from 90 to 190 (≤ 1 BPM error); grid beats land 0–21 ms *after* the true click (one analysis frame of quantisation, never early); kick events 7–28 ms after the click (median ≈ 17 ms). Add `beat_lead_ms` in the effect engine to compensate pipeline latency (the phase is predictive, so beat-synced effects can fire early).
+
+Measured on the user's tracks (`support/tracks/`, git-ignored):
+
+| Track | Found | librosa | Notes |
+|-------|-------|---------|-------|
+| Wildstylez – Timeless | 150.0 BPM, stable from ~5 s | 152 | beat F1 0.97 vs librosa; slow intro locks too |
+| KBS – Huokausten silta (karaoke) | 134.0 BPM | 136 | F1 0.99 |
+| Poison (Tune Up Remix) | 140.0 BPM | 143.6 | F1 0.90 (librosa's tempo grid is coarse) |
+| Technoboy & Isaac – Digital Playground | 150.0 BPM; holds through breakdowns; 0 BPM at the silent tail | 152 | F1 0.59 overall because librosa locks to the off-beat (+176 ms) for ~40 s; ours stays on the kicks (88 % within 50 ms) |
+
+CPU: ≈ 3.1 ms per block (≈ 15 % of one core; budget 21 ms). Known weak spots: the first ~5–15 s of a track (lock-in; confidence is low until then), kick events fire slightly more often than beats in rolling-bass sections, no downbeat/bar detection yet (Phase 6 candidate).
 
 ## 13d. Later hardware measurements (camera)
 
