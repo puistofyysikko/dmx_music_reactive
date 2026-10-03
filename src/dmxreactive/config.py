@@ -97,6 +97,11 @@ def load_config(path: str | Path | None = None) -> Config:
         scene=str(sh.get("scene", d.scene)),
         colour_hold_s=float(sh.get("colour_hold_s", d.colour_hold_s)),
         silence_fade_s=float(sh.get("silence_fade_s", d.silence_fade_s)),
+        flash_gate=float(sh.get("flash_gate", d.flash_gate)),
+        kick_flash_strength=float(sh.get("kick_flash_strength", d.kick_flash_strength)),
+        ambient_flash_rise_db=float(sh.get("ambient_flash_rise_db", d.ambient_flash_rise_db)),
+        ambient_flash_energy=float(sh.get("ambient_flash_energy", d.ambient_flash_energy)),
+        ambient_flash_hz=float(sh.get("ambient_flash_hz", d.ambient_flash_hz)),
     )
     if not 0.0 < show.max_flash_hz <= 10.0:
         raise ProfileError("show.max_flash_hz must be in (0, 10]")

@@ -22,6 +22,9 @@ class Features:
     kick: bool
     kick_strength: float
     kick_count: int
+    last_kick_strength: float  # strength (0..1) of the most recent kick; persists between kicks
+    last_kick_rise_db: float  # bass jump (dB) vs the previous ~0.4 s at the last kick
+    bass_energy: float  # 0..1 vs. the track's loud reference (slow ceiling), peak-held ~250 ms
     hat: bool
     hat_count: int
     bpm: float

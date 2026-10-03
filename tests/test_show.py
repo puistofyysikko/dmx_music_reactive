@@ -72,12 +72,16 @@ def test_flash_rate_never_exceeds_the_cap():
     assert np.min(np.diff(flashes)) >= 0.5 - 1 / 30 - 1e-6
 
 
-def test_no_flashing_without_a_locked_beat():
+def test_no_beat_scene_and_bounded_flashing_without_a_locked_beat():
     rng = np.random.default_rng(5)
     x = 0.2 * rng.standard_normal(SR * 30).astype(np.float32)  # noise: no beat
     ticks = simulate(new_show()[0], analyse(x))
-    assert strobe_series(ticks).max() == 0
     assert all(tk.mood == "ambient" for tk in ticks)
+    # ambient may flash on very strong bass hits, but never faster than ambient_flash_hz
+    flashes = flash_times(strobe_series(ticks), ticks, thresh=60)
+    assert len(flashes) <= 30 * 3 * 0.7
+    if len(flashes) > 1:
+        assert np.min(np.diff(flashes)) >= 1 / 3 - 2 / 30
 
 
 def test_silence_fades_everything_to_dark(clicks150):
@@ -154,7 +158,9 @@ def test_forced_scene_overrides_auto(clicks150):
     show, _ = new_show(scene="ambient")
     ticks = simulate(show, clicks150)
     assert all(tk.mood == "ambient" for tk in ticks)
-    assert strobe_series(ticks).max() == 0
+    flashes = flash_times(strobe_series(ticks), ticks, thresh=60)
+    if len(flashes) > 1:
+        assert np.min(np.diff(flashes)) >= 1 / 3 - 2 / 30  # ambient flash cap
 
 
 def test_show_step_is_cheap(clicks150):
@@ -163,3 +169,23 @@ def test_show_step_is_cheap(clicks150):
     simulate(show, clicks150)
     ticks = int(clicks150[-1].t * 30)
     assert (time.perf_counter() - t0) / ticks < 0.001  # < 1 ms per 33 ms tick
+
+
+def test_breakdown_stays_dark_but_the_drop_flashes_immediately():
+    """Kicks, then 8 s of non-percussive pad (grid keeps running), then kicks again."""
+    sr = SR
+    pad = 0.15 * sine_pad(8.0)
+    x = np.concatenate([click_track(150, 24.0, sr), pad, click_track(150, 12.0, sr)])
+    show, _ = new_show()
+    ticks = simulate(show, analyse(x))
+    series = strobe_series(ticks)
+    hits = flash_times(series, ticks)
+    in_breakdown = hits[(hits > 26.0) & (hits < 31.5)]
+    after_drop = hits[(hits > 32.2) & (hits < 36.0)]
+    assert len(in_breakdown) == 0  # no flashing in the bass-less section
+    assert len(after_drop) >= 4  # flashes resume within a second of the kicks returning
+
+
+def sine_pad(seconds):
+    t = np.arange(int(seconds * SR)) / SR
+    return (np.sin(2 * np.pi * 880 * t) + np.sin(2 * np.pi * 1320 * t)).astype(np.float32) * 0.5

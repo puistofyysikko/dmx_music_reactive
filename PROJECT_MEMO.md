@@ -498,6 +498,20 @@ Verification (no hardware): 13 show tests (scene switching, flash timing vs true
 
 Not yet verified on the real rig: end-to-end latency (audio → light; `beat_lead_ms` is a guess), how the movement/colour pacing looks, flash brightness at `master` 0.8.
 
+## 13c-4. Day 2 (2026-10-03): first live feedback and fixes
+
+User's first real-rig run: ambient mode looked good; (1) the spot sometimes "does not know where to move" and makes small movements for ~1 s; (2) strobe hits the rhythm but flashes in low-energy moments and misses high-energy ones. Diagnosed on the user's tracks in simulation (`diag` of flashes vs bass energy and pan direction reversals), then fixed:
+
+| Problem | Cause | Fix | Result (simulation, 6 clips) |
+|---------|-------|-----|------------------------------|
+| Flashes in quiet moments | the predicted grid keeps running through breakdowns | new `bass_energy` feature (bass band vs a *slow* ceiling, −0.25 dB/s, peak-held 250 ms) gates grid flashes (`flash_gate` 0.35) and scales flash/accent intensity | flashes in low-bass moments 12–28 % → 0–6 % |
+| Drops missed | beat scene was entered slowly (2 s lock + 6 s dwell) and left after 4 s | enter after 1.5 s lock / 3 s dwell; leave only after 10 s unlocked (the grid survives breakdowns); strong off-grid bass hits flash too (`kick_flash_strength` 0.6, limiter still caps rate); ambient scene flashes only on very strong bass hits (≥ 0.75, rise ≥ 6 dB, ≤ 3 Hz) | isolated strong kicks without a flash (±150 ms): Falco 3/102, Timeless 30/166 (was 120/166 at ±80 ms), DP 15/96, Poison 18/99; karaoke 77/209 (syncopated bass hits), Ti Amo 40/50 (ballad: by design) |
+| Spot hesitation / small movements | beat position was recomputed from the phase, so every grid re-sync made pan/tilt targets jump (≈ 1.2 direction reversals per second) | beat position integrates smoothly with BPM; a fired beat only nudges it 25 % toward the nearest whole beat | pan reversals per 115 s: Timeless 139 → 33, Digital Playground 67 → 29, karaoke 53 → 30 |
+
+Findings: the kick "rise" (bass jump) is *not* a reliable transient test (hardstyle median rise 4–6 dB vs noise 8 dB), so it is only used for the ambient-scene flash; beat-scene flashes rely on the verified grid + bass energy. New config keys (`show:`): `flash_gate`, `kick_flash_strength`, `ambient_flash_energy`, `ambient_flash_rise_db`, `ambient_flash_hz`. New Features: `bass_energy`, `last_kick_strength`, `last_kick_rise_db`. 76 tests pass.
+
+Still to verify on the rig: whether the hesitation is gone in ambient mode too (ambient motor speed 0.6 may still be too fast for the slow wander; slower speed + fewer target updates is the next lever); whether flash gating feels right on live material.
+
 ## 13d. Later hardware measurements (camera)
 
 - **TODO (optional, precision): high-frame-rate strobe re-measurement.** The user recalls the a6000 can record at much higher frame rates once its settings are found again (to our knowledge the a6000 tops out at 1080/60p, so this is unconfirmed; if it is not possible, a phone's 240 fps slow-motion mode, or a photodiode/LDR into the sound card's line-in analysed as audio, would give kHz-level timing). Goals: (1) measure the Pot Strobe above 10 Hz (10–19 Hz is extrapolated) and the PicoSpot up to 25 Hz before ever raising `safe_max_hz`; (2) measure flash pulse width; (3) measure end-to-end audio→light latency (click track on the laptop → flash). Use `strobe-sweep --max-value` and `tools/strobe_analyze.py` (the analyser's ~10 Hz limit is a 60 fps limit, not an algorithm limit). Millisecond precision is a nice-to-have, not a requirement for the party use.

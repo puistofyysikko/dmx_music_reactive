@@ -26,6 +26,11 @@ show:
   scene: auto             # auto | beat | ambient
   colour_hold_s: 1.5      # min time between colour-wheel changes (mechanical)
   silence_fade_s: 2.0
+  flash_gate: 0.35        # no beat flash below this bass energy (breakdowns stay dark); 0 = always
+  kick_flash_strength: 0.6   # strong bass hits between grid beats also flash; >1 disables this
+  ambient_flash_energy: 0.75 # in the ambient scene only very strong bass hits flash (drops)
+  ambient_flash_rise_db: 6   # ...and only real transients (bass jump in dB)
+  ambient_flash_hz: 3
 
 # Profiles are looked up in config/fixtures/<profile>.json
 fixtures:

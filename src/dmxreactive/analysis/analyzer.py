@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import deque
+
 import numpy as np
 
 from dmxreactive.analysis.dsp import AdaptiveNorm, OnsetDetector, PeakNorm
@@ -16,6 +18,7 @@ LOCK_WINDOW_MS = 60.0  # a kick within this (or 15 % of the beat period, if shor
 #                         predicted beat counts as on the grid; chance level is then ~0.2-0.25
 LOCK_ALPHA = 0.12  # coherence smoothing per kick (~ last 8 kicks)
 LOCK_ON, LOCK_OFF = 0.5, 0.3
+BASS_HOLD_S = 0.25  # bass_energy peak-hold, so it reads the last kick between kicks
 FLUX_WEIGHTS = (1.5, 1.0, 0.7, 0.5, 0.0)  # how much each band feeds the tempo envelope
 
 
@@ -43,6 +46,13 @@ class Analyzer:
         self._kick_count = self._hat_count = self._beat_count = 0
         self._silent_frames = 0
         self._level_fast = self._level_slow = 0.0
+        # slow ceiling (-0.25 dB/s): a 10 s breakdown must stay 'quiet', not re-normalise to loud
+        self._bass_slow = AdaptiveNorm(self.fr, range_db=24.0, decay_db_per_s=0.25,
+                                       min_ceiling_db=-90.0)
+        self._bass_hold = 0.0
+        self._bass_db_hist: deque[float] = deque(maxlen=max(4, round(0.4 * self.fr)))
+        self._last_kick_rise = 0.0
+        self._last_kick_strength = 0.0
         self._coherence = 0.0  # share of recent kicks that fell on the beat grid
         self._locked = False
 
@@ -99,6 +109,12 @@ class Analyzer:
             self._locked = True
         elif self._coherence < LOCK_OFF:
             self._locked = False
+        self._bass_hold = max(self._bass_slow(band_db[0]),
+                              self._bass_hold * float(np.exp(-1.0 / (BASS_HOLD_S * self.fr))))
+        if kick:
+            self._last_kick_strength = float(fluxes_arr[0])
+            self._last_kick_rise = band_db[0] - min(self._bass_db_hist, default=band_db[0])
+        self._bass_db_hist.append(band_db[0])
         self._kick_count += kick
         self._hat_count += hat
         self._beat_count += beat_state.beat
@@ -122,6 +138,9 @@ class Analyzer:
             kick=bool(kick),
             kick_strength=float(fluxes_arr[0]) if kick else 0.0,
             kick_count=self._kick_count,
+            last_kick_strength=self._last_kick_strength,
+            last_kick_rise_db=self._last_kick_rise,
+            bass_energy=self._bass_hold,
             hat=bool(hat),
             hat_count=self._hat_count,
             bpm=beat_state.bpm,
