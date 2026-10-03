@@ -587,13 +587,16 @@ Done:
 - **`scripts/start_show.sh`** (pre-flight, asks before starting if something failed, then `dmxreactive run "$@"`), **`scripts/install_desktop_entry.sh`** (writes `~/.local/share/applications/dmxreactive.desktop`, opens konsole; **not installed yet — run it to get the launcher**), **`docs/EVENT_CHECKLIST.md`** (setup, checks, during the party, troubleshooting, packing list; derived from §11).
 - ArtPoll support in `dmx/artnet.py` (`build_artpoll`, `parse_artpollreply`, `discover`), `FakeNode` can answer polls; 106 tests pass.
 
-Still open: soak run (30 min – 3 h), USB DAC/mixer as default output and unplug/replug (needs the wires, tomorrow), Bluetooth `light_delay_ms` measurement, whether the launcher feels right.
+Still open: USB DAC/mixer as default output and unplug/replug (needs the wires, tomorrow), Bluetooth `light_delay_ms` measurement, whether the launcher feels right.
 
 ## 13c-11. Day 3: soak test
 
 `tools/soak.py` (hardware-free, silent): a looping playlist of `support/tracks/` plays into a virtual null sink (`dmxsoak`), the real capture path (parec on its monitor) feeds the analysis, the full show runs at the configured rate and sends Art-Net to a fake node on loopback; a metrics line is logged every minute (RSS, CPU, packets/s, sequence gaps, late ticks, p95/max loop error, audio drops/restarts, analysis/send errors, flashes/drops, threads, open fds) and PASS/FAIL criteria are applied at the end (memory growth ≤ 15 MB after 5 min warm-up, constant threads/fds, no sequence gaps/bad packets/errors, late ticks ≤ 0.1 %, no capture restarts, dropped audio blocks ≤ 0.1 %, packet rate ≥ 97 % of nominal). The sink is removed on exit.
 Found while preparing it: `LoopStats.errors` grew without bound (~15 MB per 3 h) → now a bounded deque (+ running maximum); `FakeNode(record_times=False)` for long runs. 2.5-minute dry run: PASS (41.5 → 41.8 MB RSS, 40.0 pkt/s, 0 gaps, 0 late ticks, 30–36 % of one core).
 **3 h run started 2026-10-03 18:54 (detached, with a sleep inhibitor), log `support/soak_20261003_1854.log`, expected end ≈ 21:54.** Heavy work on the laptop (e.g. the full test suite) would distort its timing numbers.
+
+### Soak result (3 h, 2026-10-03 18:54–21:54): **PASS**
+179 one-minute samples, 83 tracks played (looping the 7-track playlist, including the live recordings): RSS 41.6 → 41.9 MB (**+0.10 MB over 174 min after warm-up**, i.e. no leak), threads constant at 5, open fds constant at 9; CPU 37–38 % of one core (analysis + show + output + capture, steady); **40.0 packets/s in every sample**, 0 sequence gaps, 0 bad packets, 0 send errors, 0 analysis errors; **0 late ticks** (worst single tick 16.6 ms), 0 dropped audio blocks, 0 capture restarts. Scenes at the sample times: beat 119, drive 51, ambient 9. Activity: 24,474 flashes (≈ 8,150/h) and 299 drop blasts (≈ 100/h, i.e. about one per 36 s on this dance-heavy playlist; `drop_min_gap_s` is the knob if that is too frequent). In parallel the user ran the real rig from YouTube for the same period without issues.
 
 ## 13d. Later hardware measurements (camera)
 
