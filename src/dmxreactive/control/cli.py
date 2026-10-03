@@ -243,6 +243,12 @@ def cmd_run(args) -> int:
     from dmxreactive.live import run_live
 
     config = load_config(args.config)
+    if args.flash_path != "both":
+        from dataclasses import replace
+
+        over = ({"kick_flash_strength": 2.0, "flash_gate": 0.0} if args.flash_path == "grid"
+                else {"flash_gate": 2.0})
+        config = replace(config, show=replace(config.show, **over))
     host, _, port = (args.target or "").partition(":")
     source = create_source(config.audio, args.file, args.device, loop=args.loop)
     where = f"{host or config.node.host}:{port or config.node.port}"
@@ -374,6 +380,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--seconds", type=float, help="stop after this many seconds")
     p.add_argument("--scene", choices=["auto", "beat", "ambient", "drive"], help="force a scene")
     p.add_argument("--no-keys", action="store_true", help="disable hotkeys")
+    p.add_argument("--flash-path", choices=["both", "grid", "kick"], default="both",
+                   help="latency-test aid: strobe only on predicted beats (grid) or only on "
+                   "detected kicks (kick)")
     p.set_defaults(func=cmd_run)
 
     sub.add_parser("list-devices", help="list audio capture sources").set_defaults(

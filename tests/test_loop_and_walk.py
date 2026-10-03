@@ -47,7 +47,8 @@ def test_run_output_streams_and_blacks_out_on_exit():
         loop, sender = run_output(cfg, on_tick, duration_s=0.5, host="127.0.0.1", port=node.port)
         assert node.wait_for_packets(loop.stats.ticks + 3)
         time.sleep(0.05)
-        assert 14 <= loop.stats.ticks <= 16
+        expected = 0.5 * cfg.rate_hz
+        assert expected - 1.5 <= loop.stats.ticks <= expected + 1.5
         assert node.sequence_gaps == 0 and sender.send_errors == 0
         frame = node.frame
         assert frame[7] == 0 and frame[9] == 0  # last frames are blackout

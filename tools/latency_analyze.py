@@ -16,7 +16,7 @@ import subprocess
 import sys
 
 import numpy as np
-from strobe_analyze import frame_luma
+from video_luma import luma_series
 
 SR = 48000
 
@@ -42,7 +42,11 @@ def audio_clicks(path: str) -> np.ndarray:
 
 
 def flash_onsets(path: str, roi: str | None) -> tuple[np.ndarray, float]:
-    t, y = frame_luma(path, roi)
+    box = None
+    if roi:  # "w:h:x:y" in source pixels
+        w, h, x, yy = (int(v) for v in roi.split(":"))
+        box = (w, h, x, yy)
+    t, y = luma_series(path, box)
     span = max(y) - min(y)
     fps = (len(t) - 1) / (t[-1] - t[0])
     onsets, prev_i = [], -10**9
@@ -57,7 +61,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("video")
     ap.add_argument("--lead", type=float, default=30.0, help="beat_lead_ms used during the clip")
-    ap.add_argument("--roi", help="crop w:h:x:y to the lit area (ffmpeg crop syntax)")
+    ap.add_argument("--roi", help="crop w:h:x:y (source pixels) to the lit area")
     ap.add_argument("--skip", type=float, default=15.0, help="ignore the first seconds (lock-in)")
     ap.add_argument("--min-lag", type=float, default=-0.15, help="earliest accepted flash (s)")
     ap.add_argument("--max-lag", type=float, default=0.35, help="latest accepted flash (s)")

@@ -8,16 +8,16 @@ node:
   universe: 1             # node factory default is Art-Net Universe 1 (Port 1)
 
 output:
-  rate_hz: 30             # DMX frame rate; node refresh should be set equal or higher
+  rate_hz: 40             # DMX frame rate = the node's 40 Hz output (measured: less flash jitter)
 
 audio:
   device: "@DEFAULT_MONITOR@"   # monitor of the current default output (follows speaker/mixer switch)
   sample_rate: 48000
   block_size: 1024              # 21 ms per block
-  latency_ms: 20
+  latency_ms: 10
 
 show:
-  beat_lead_ms: 30        # fire beat effects this much early to cancel pipeline latency (tune by camera)
+  beat_lead_ms: 95        # fire predicted-beat flashes this much early (camera: ~65 ms late at 30)
   max_flash_hz: 8         # hard cap on dimmer-pulse flashes per second (<= 10)
   flash_decay_ms: 70
   master: 0.8             # overall brightness ceiling (+/- keys change it live)
@@ -36,7 +36,10 @@ show:
   drive_flash_gate: 0.25     # drive scene: flash on kick events if bass energy is at least this
   drive_min_confidence: 0.15 # ...and some periodicity (rules out pure noise)
   mover_flash_every: 4       # every 4th flash event the moving head flashes too (0 = never)
-  mover_flash_hold_ms: 200   # the moving head's dimmer is slow: hold its flashes this long
+  mover_flash_mode: strobe   # strobe = burst the head's own strobe (crisp, camera-verified); dimmer = slow
+  mover_flash_ms: 250        # strobe-mode burst length (~2 flashes at 8 Hz)
+  mover_flash_hz: 8          # strobe rate in a burst (the profile's 10 Hz cap applies)
+  mover_flash_hold_ms: 200   # dimmer mode: hold flashes this long (its dimmer needs ~170 ms)
   drop_duration_s: 1.5       # drop blast: white, strobe stutter (6 Hz) then fade; 0.5-2 s
   drop_dip: 0.25             # a breakdown = bass energy this far below the recent loud level
   drop_min_gap_s: 10         # at most one blast per this many seconds

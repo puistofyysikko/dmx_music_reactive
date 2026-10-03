@@ -9,6 +9,7 @@ speakers are swapped for a USB DAC feeding the mixer) so lights keep following t
 from __future__ import annotations
 
 import logging
+import os
 import queue
 import subprocess
 import threading
@@ -51,6 +52,13 @@ class PulseMonitorSource:
                 "--channels=1", f"--device={self.device}", f"--latency-msec={self._latency_ms}",
                 "--client-name=dmxreactive", "--stream-name=lights"]
 
+    def _env(self) -> dict[str, str]:
+        """Ask PipeWire for a small capture quantum too (it follows --latency-msec only roughly)."""
+        env = dict(os.environ)
+        samples = max(64, round(self._latency_ms * self.sample_rate / 1000))
+        env.setdefault("PIPEWIRE_LATENCY", f"{samples}/{self.sample_rate}")
+        return env
+
     def start(self) -> None:
         self._thread.start()
         if self.device == DEFAULT_MONITOR and self._command is None:
@@ -91,7 +99,7 @@ class PulseMonitorSource:
         while not self._stop.is_set():
             try:
                 proc = subprocess.Popen(self._build_command(), stdout=subprocess.PIPE,
-                                        stderr=subprocess.DEVNULL, bufsize=0)
+                                        stderr=subprocess.DEVNULL, bufsize=0, env=self._env())
             except OSError as exc:
                 log.error("cannot start audio capture: %s", exc)
                 self._stop.wait(backoff)

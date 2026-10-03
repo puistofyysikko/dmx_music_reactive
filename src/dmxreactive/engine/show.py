@@ -50,7 +50,11 @@ class ShowConfig:
     drive_flash_gate: float = 0.25  # in the drive scene the kick events are the evidence
     drive_min_confidence: float = 0.15  # ...and some periodicity (rules out pure noise)
     mover_flash_every: int = 4  # every Nth flash event the moving head flashes too (0 = never)
-    mover_flash_hold_ms: float = 200.0  # the moving head's dimmer is slow: hold flashes this long
+    mover_flash_mode: str = "strobe"  # "strobe": burst the head's built-in strobe (crisp);
+    #                                   "dimmer": pulse its slow dimmer (slew ~170 ms full scale)
+    mover_flash_ms: float = 250.0  # length of a strobe-mode burst (~2 flashes at 8 Hz)
+    mover_flash_hz: float = 8.0  # strobe rate during a burst (the profile's safety cap applies)
+    mover_flash_hold_ms: float = 200.0  # dimmer mode: hold flashes this long
     drop_duration_s: float = 1.5  # length of the drop blast (strobe stutter, then a fade)
     drop_dip: float = 0.25  # a breakdown = bass energy this far below the recent loud reference
     drop_min_gap_s: float = 10.0  # at most one drop blast per this many seconds
@@ -102,6 +106,8 @@ class BeatScene:
         self._flash = Decay(cfg.flash_decay_ms / 1000.0)
         self._accent = Decay(0.25)
         self._mover_flash = HoldDecay(cfg.mover_flash_hold_ms / 1000.0, 0.12)
+        self._burst_until = -1.0
+        self._now = 0.0
         self._events = 0
         self.strobe_enabled = True
         self.flash_count = 0
@@ -111,11 +117,15 @@ class BeatScene:
         self._events += 1
         every = self.cfg.mover_flash_every
         if every and self._events % every == 0:
-            self._mover_flash.trigger(1.0)
+            if self.cfg.mover_flash_mode == "strobe":
+                self._burst_until = self._now + self.cfg.mover_flash_ms / 1000.0
+            else:
+                self._mover_flash.trigger(1.0)
 
     def render(self, c: Ctx) -> Intent:
         out: Intent = {}
         cfg = self.cfg
+        self._now = c.t
         energy = c.bass_energy
         fired_flash = False
         beat_now = bool(c.kicks and c.kick_strength >= 0.4) if self.kick_driven else bool(
@@ -141,6 +151,9 @@ class BeatScene:
             self._accent.trigger(max(0.6, clamp01(energy / 0.6)))
         accent = self._accent.step(c.dt)
         mover_flash = self._mover_flash.step(c.dt)
+        burst = c.t < self._burst_until
+        if burst:
+            mover_flash = max(mover_flash, 0.9)  # flashes need light to flash: lift the dimmer
         for f in self.strobes:
             out[f.name] = {"dimmer": flash if self.strobe_enabled else 0.0}
         pos = c.t * 2.0 if self.kick_driven else c.beat_pos  # drive: pseudo-beats at 120/min
@@ -156,6 +169,7 @@ class BeatScene:
                 "tilt": tilt_lo + tilt * (tilt_hi - tilt_lo),
                 "speed": 1.0,
                 "color": PALETTE[(bar + i) % len(PALETTE)],
+                "strobe_hz": cfg.mover_flash_hz if burst else 0.0,
             }
         return out
 
@@ -481,7 +495,11 @@ class Show:
                 level = 0.0 if self.blackout else clamp01(float(want["dimmer"])) * self._master_now
                 fx.set("dimmer", level)
             if fx.has("strobe"):
-                fx.set("strobe", 0.0)  # flashes are dimmer pulses; built-in strobe stays off
+                hz = float(want.get("strobe_hz", 0.0))  # only mover flash bursts use it
+                if hz > 0 and self.strobe_enabled and not self.blackout and fx.group == "movers":
+                    fx.set_hz("strobe", hz)  # capped by the profile's safe_max_hz
+                else:
+                    fx.set("strobe", 0.0)  # otherwise the built-in strobe stays off
             if "pan" in want and fx.has("pan"):
                 pan = _clip(float(want["pan"]), pan_lo, pan_hi)
                 fx.set("pan", clamp01(st.pan.step(pan, dt)))

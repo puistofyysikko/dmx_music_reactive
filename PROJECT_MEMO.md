@@ -550,9 +550,31 @@ Findings and changes:
 - **Mover flash now holds** `mover_flash_hold_ms` (200 ms) before decaying (`HoldDecay` envelope) — the PicoSpot's dimmer is a slow, smoothed LED driver (it is a stage-effect head, not a strobe); whether even 200 ms is visible is **to be measured**: new command `dmxreactive pulse-test mover1 [--mode dimmer|strobe] [--widths 33,67,133,200,333,500]` pulses the dimmer (or bursts the head's built-in strobe, which the earlier camera test showed produces clean 1–10 Hz flashes) so the real response can be seen or filmed. Fallback if dimmer pulses stay invisible: let the mover "flash" by bursting its built-in strobe channel (profile cap 10 Hz) for ~300 ms.
 - Tests: 25 show tests (blast length/white/flash cap/strobe key, drop only after groove, HoldDecay).
 
+## 13c-8. Day 3: GoPro measurements (240 fps, shutter 1/480) and what they changed
+
+User confirmed the drop blast now works. The GoPro clips are HEVC, which this machine's ffmpeg cannot decode (no hevc decoder; no libx264 either), so `tools/video_luma.py` decodes with **PyAV** (`av` in the dev extras; ~125 fps at 1080p) and `tools/latency_analyze.py` uses it.
+
+| Clip | Test | Result |
+|------|------|--------|
+| GX014448 | Pot Strobe dimmer pulses (33/67/133 ms) | **crisp**: rise/fall 4 ms (one frame); widths come out 29–154 ms because our 30 Hz frames are resampled by the node's 40 Hz output (→ run at 40 Hz) |
+| GX014446 | PicoSpot **dimmer** pulses 33–500 ms | slew-limited: ≈ **170 ms** to swing full scale up and ≈ 170 ms down. Peak reached: 33–67 ms → ~25 % of the swing, 133 ms → 40–60 %, 200 ms → 65–85 %, ≥ 333 ms → full. Explains why the old 90 ms mover flash was invisible |
+| GX014447 | PicoSpot built-in **strobe** bursts at 6 Hz | crisp: ~17–20 ms full-brightness flashes, 4 ms edges, dark between (the head is lit only during the flash; steady when strobe = 0) |
+| GX014449 | click track → show (kick path) → light | flash is **+98 ms late** vs the click sound (59 clicks after lock: p10 +84, p90 +124) |
+
+Software pipeline alone (new `tools/pipeline_latency.py`, real-time file source → analysis → show → packets on a fake node): kick path ≈ +34…+51 ms after the click; predicted-grid path with the old 30 ms lead ≈ +1 ms. So ≈ 64 ms of the 98 ms lies outside the software (audio capture buffering, Art-Net → node 40 Hz output, fixture, camera/speaker offsets). Note: in the click-track clip the flashes were kick-triggered (the synthetic click's bass energy decays between clicks, so the energy gate blocked grid flashes); the kick path cannot be led, the grid path can.
+
+Changes made:
+- `beat_lead_ms` 30 → **95** (software grid latency 30 + the ~64 ms outside it; software-only check now shows grid flashes −74 ms early, i.e. ≈ 0 on the real chain — to be confirmed by a re-film). Dataclass default stays 30 (neutral for simulation); `config.yaml` sets 95.
+- `output.rate_hz` 30 → **40** (matches the node's 40 Hz output, less width jitter); audio capture `latency_ms` 20 → **10** with `PIPEWIRE_LATENCY` requested for the parec process (tone integrity checked, 0 drops).
+- **Mover flash now uses the head's built-in strobe** (`mover_flash_mode: strobe`, default): every 4th flash event a ~250 ms burst at 8 Hz (profile cap 10 Hz applies, DMX ≤ 101), dimmer lifted to 0.9 so the flashes have light; `dimmer` mode (HoldDecay) remains available. Off with `s`, with `mover_flash_every: 0`, and in blackout.
+- `dmxreactive run --flash-path grid|kick` (latency-test aid) isolates one strobe path; `tools/pipeline_latency.py [--path grid|kick]`.
+- Remaining latency of the kick path (drive scene / off-grid flashes) ≈ 100+ ms cannot be led away; options if it bothers: smaller `audio.block_size` (512), a delay on the audio output, or a predictive drive scene for regular kicks.
+
+To verify next: re-film `dmxreactive run --flash-path grid --scene beat` with the click track and run `latency_analyze.py clip.mp4 --lead 95` (expect a median near 0 ms), and look at the new mover strobe bursts live.
+
 ## 13d. Later hardware measurements (camera)
 
-**GoPro Hero 7 (≈ 240 fps)** is available (the Sony a6000 tops out at 1080/60p, confirmed from its specs). Planned clips, in priority order:
+**GoPro Hero 7 (≈ 240 fps)** was used for the first round (see §13c-8; the planned clips below were recorded and analysed) (the Sony a6000 tops out at 1080/60p, confirmed from its specs). Planned clips, in priority order:
 1. `pulse-test mover1` (dimmer pulses 33–500 ms) and `pulse-test mover1 --mode strobe` — how fast the PicoSpot's dimmer rises/falls and whether its built-in strobe gives crisp bursts; decides how the "mover flash" is implemented.
 2. `pulse-test strobe1 --widths 33,67,133` — the Pot Strobe's dimmer response (our strobe flashes are 70 ms dimmer pulses).
 3. **End-to-end latency** (sets `beat_lead_ms`): `python tools/make_click_track.py support/click150.wav 150 40`; run `dmxreactive run --scene beat`; play the click WAV with `paplay`; film lights + speaker with the GoPro (audio on); `python tools/latency_analyze.py clip.mp4 --lead 30` pairs every click in the audio with the first flash onset and suggests a new `beat_lead_ms` (validated on a synthetic clip with a known 80 ms offset: measured +83 ms). Note the tools decode with ffmpeg only (this machine's ffmpeg has no libx264 encoder; decoding of camera files works).

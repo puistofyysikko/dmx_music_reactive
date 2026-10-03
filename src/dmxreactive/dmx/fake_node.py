@@ -10,7 +10,7 @@ from dmxreactive.dmx.artnet import parse_artdmx
 
 
 class FakeNode:
-    def __init__(self, host: str = "127.0.0.1", port: int = 0) -> None:
+    def __init__(self, host: str = "127.0.0.1", port: int = 0, history_channels: int = 0) -> None:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._sock.bind((host, port))
         self._sock.settimeout(0.1)
@@ -22,6 +22,8 @@ class FakeNode:
         self.invalid = 0
         self.sequence_gaps = 0
         self.arrival_times: list[float] = []
+        self._history_channels = history_channels
+        self.history: list[tuple[float, bytes]] = []  # (arrival time, first N channels)
         self._last_seq = 0
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="fake-node", daemon=True)
@@ -64,6 +66,8 @@ class FakeNode:
                 self._port_address = pkt.port_address
                 self.packets += 1
                 self.arrival_times.append(now)
+                if self._history_channels:
+                    self.history.append((now, self._frame[: self._history_channels]))
 
     @property
     def frame(self) -> bytes:

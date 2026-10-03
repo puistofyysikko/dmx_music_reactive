@@ -239,8 +239,8 @@ def test_ambient_mover_breathes_slowly_and_can_be_switched_off():
     assert abs(1 / freqs[int(np.argmax(spectrum))] - 7.0) < 1.0  # breathing period ~ 7 s
 
 
-def test_mover_flashes_on_every_fourth_flash_event(clicks150):
-    show, _ = new_show(scene="beat")
+def test_mover_flashes_on_every_fourth_flash_event_in_dimmer_mode(clicks150):
+    show, _ = new_show(scene="beat", mover_flash_mode="dimmer")
     ticks = simulate(show, clicks150)
     late = ticks[600:]
     full = 0.8 * 255 * 0.9  # master 0.8: a real flash reaches ~full master brightness
@@ -251,10 +251,10 @@ def test_mover_flashes_on_every_fourth_flash_event(clicks150):
 
 
 def test_mover_flash_can_be_disabled_and_obeys_the_strobe_key(clicks150):
-    off, _ = new_show(scene="beat", mover_flash_every=0)
+    off, _ = new_show(scene="beat", mover_flash_every=0, mover_flash_mode="dimmer")
     ticks = simulate(off, clicks150)[600:]
     assert mover(ticks, 7).max() < 0.8 * 255 * 0.8  # pulses stay below a flash
-    show, _ = new_show(scene="beat")
+    show, _ = new_show(scene="beat", mover_flash_mode="dimmer")
     show.command("s")
     ticks = simulate(show, clicks150)[600:]
     assert mover(ticks, 7).max() < 0.8 * 255 * 0.8 and strobe_series(ticks).max() == 0
@@ -317,3 +317,33 @@ def test_hold_decay_envelope_holds_then_decays():
     values = [env.step(1 / 30) for _ in range(15)]
     assert values[0] == 1.0 and all(v == 1.0 for v in values[:6])  # 200 ms hold = 6 frames
     assert values[7] < 1.0 and values[-1] < values[7]
+
+
+def test_mover_strobe_bursts_every_fourth_event_with_the_cap_respected(clicks150):
+    show, _ = new_show(scene="beat")  # default mover_flash_mode = strobe
+    ticks = simulate(show, clicks150)[600:]
+    burst = mover(ticks, 8)  # the head's built-in strobe channel
+    starts = [i for i in range(1, len(burst)) if burst[i] > 0 >= burst[i - 1]]
+    strobe_flashes = flash_times(strobe_series(ticks), ticks)
+    assert 0.15 < len(starts) / max(len(strobe_flashes), 1) < 0.4  # about every 4th
+    lengths = []
+    for i in starts:
+        j = i
+        while j < len(burst) and burst[j] > 0:
+            j += 1
+        lengths.append((j - i) / 30)
+    assert 0.2 <= np.median(lengths) <= 0.32  # ~250 ms bursts
+    assert burst.max() <= 101  # PicoSpot cap: 10 Hz = DMX 101
+    assert burst.max() >= 70  # ... and an 8 Hz burst is really commanded
+
+
+def test_mover_strobe_bursts_off_with_the_key_the_setting_and_blackout(clicks150):
+    keyed, _ = new_show(scene="beat")
+    keyed.command("s")
+    assert mover(simulate(keyed, clicks150)[600:], 8).max() == 0
+    never, _ = new_show(scene="beat", mover_flash_every=0)
+    assert mover(simulate(never, clicks150)[600:], 8).max() == 0
+    dark, _ = new_show(scene="beat")
+    dark.command("b")
+    ticks = simulate(dark, clicks150)[600:]
+    assert mover(ticks, 8).max() == 0 and mover(ticks, 7).max() == 0
