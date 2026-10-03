@@ -14,10 +14,11 @@ from dataclasses import dataclass
 import numpy as np
 
 BPM_MIN = 70.0
-BPM_MAX = 200.0
+BPM_MAX = 240.0  # frenchcore / uptempo reach ~210-230
 BPM_STEP = 0.5
 PRIOR_CENTRE_BPM = 140.0
 PRIOR_SIGMA_OCT = 0.7  # width of the log-tempo prior, in octaves
+DOUBLE_TIME_RATIO = 0.85  # prefer 2x tempo if its comb score is at least this share of the best
 
 
 @dataclass(frozen=True)
@@ -108,6 +109,19 @@ class TempoTracker:
             self._confidence *= 0.9
             return
         k = int(np.argmax(weighted))
+        # Half-time ambiguity: if every kick is equally strong, tempo p and 2p score the same
+        # and the prior would pick the slower one. Prefer the faster pulse when it is as well
+        # supported (offbeat-only content scores clearly lower at 2p, so ordinary 4/4 is safe).
+        doubled = False
+        double = 2.0 * self._bpms[k]
+        if double <= BPM_MAX:
+            j = int(np.argmin(abs(self._bpms - double)))
+            # take the best bin within +-3 % of 2x (tempo estimates carry a few % of slack)
+            lo, hi = np.searchsorted(self._bpms, [0.97 * double, 1.03 * double])
+            if hi > lo:
+                j = lo + int(np.argmax(scores[lo:hi]))
+                if scores[j] >= DOUBLE_TIME_RATIO * scores[k]:
+                    k, doubled = j, True
         mean_score = float(scores[scores > 0].mean())
         conf = float(np.clip((scores[k] / max(mean_score, 1e-9) - 1.0) / 2.5, 0.0, 1.0))
         cand = float(self._bpms[k])
@@ -120,6 +134,8 @@ class TempoTracker:
             else:
                 self._challenger, self._challenger_hits = cand, 1
             ratio = weighted[k] / max(weighted[int(np.argmin(abs(self._bpms - self._bpm)))], 1e-9)
+            if doubled:  # the prior was deliberately overruled: judge on raw comb support
+                ratio = max(ratio, 1.2)
             # Once a tempo is established (a breakdown must not flip it) demand long evidence.
             need_hits, need_ratio = (14, 1.3) if self._established else (3, 1.1)
             if self._challenger_hits >= need_hits and ratio > need_ratio:

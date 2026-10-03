@@ -330,7 +330,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--device", help="capture source name (default: config audio.device)")
     p.add_argument("--target", help="override node as host[:port], e.g. 127.0.0.1:16454 for sim")
     p.add_argument("--seconds", type=float, help="stop after this many seconds")
-    p.add_argument("--scene", choices=["auto", "beat", "ambient"], help="force a scene")
+    p.add_argument("--scene", choices=["auto", "beat", "ambient", "drive"], help="force a scene")
     p.add_argument("--no-keys", action="store_true", help="disable hotkeys")
     p.set_defaults(func=cmd_run)
 

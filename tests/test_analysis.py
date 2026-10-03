@@ -33,6 +33,25 @@ def test_click_track_tempo_and_beat_timing(bpm):
     assert len(kicks) >= 0.9 * len(beats) and 0 < np.median(koff) < 35
 
 
+@pytest.mark.parametrize("bpm", [207, 215])
+def test_very_fast_tempo_frenchcore_range(bpm):
+    feats = run(click_track(bpm, 26.0, SR))
+    assert abs(np.median([f.bpm for f in feats[-40:]]) - bpm) <= 1.5
+    assert feats[-1].beat_locked
+
+
+def test_half_time_is_not_preferred_when_every_pulse_is_a_real_kick():
+    # kicks every 290 ms (207 BPM): the half-time 103 BPM must lose to the real tempo
+    feats = run(click_track(207, 30.0, SR))
+    assert np.median([f.bpm for f in feats[-80:]]) > 190
+
+
+def test_ordinary_tempo_is_not_doubled():
+    for bpm in (90, 105, 120):
+        feats = run(click_track(bpm, 26.0, SR))
+        assert abs(np.median([f.bpm for f in feats[-40:]]) - bpm) <= 1.0
+
+
 def test_tempo_follows_a_change_and_ignores_nothing_in_between():
     x = np.concatenate([click_track(120, 20.0, SR), click_track(150, 30.0, SR)])
     feats = run(x)

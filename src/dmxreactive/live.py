@@ -120,5 +120,5 @@ def _status_line(show: Show, f: Features | None, age: float, keys: bool) -> str:
         audio = (f"{f.bpm:5.1f} BPM {'LOCKED' if f.beat_locked else 'free  '} "
                  f"level {f.level:3.0%}")
     flags = ("BLACKOUT " if show.blackout else "") + ("" if show.strobe_enabled else "NOSTROBE ")
-    hint = "  [b blackout, s strobe, a/1/2 scene, +/- master, Ctrl-C quit]" if keys else ""
+    hint = "  [b blackout, s strobe, a/1/2/3 scene, +/- master, Ctrl-C quit]" if keys else ""
     return f"\r{show.mood:<8} {audio} master {show.master:.0%} {flags}{hint}\033[K"

@@ -102,9 +102,13 @@ def load_config(path: str | Path | None = None) -> Config:
         ambient_flash_rise_db=float(sh.get("ambient_flash_rise_db", d.ambient_flash_rise_db)),
         ambient_flash_energy=float(sh.get("ambient_flash_energy", d.ambient_flash_energy)),
         ambient_flash_hz=float(sh.get("ambient_flash_hz", d.ambient_flash_hz)),
+        drive_kick_rate=float(sh.get("drive_kick_rate", d.drive_kick_rate)),
+        drive_energy=float(sh.get("drive_energy", d.drive_energy)),
+        drive_flash_gate=float(sh.get("drive_flash_gate", d.drive_flash_gate)),
+        drive_min_confidence=float(sh.get("drive_min_confidence", d.drive_min_confidence)),
     )
     if not 0.0 < show.max_flash_hz <= 10.0:
         raise ProfileError("show.max_flash_hz must be in (0, 10]")
-    if show.scene not in ("auto", "beat", "ambient"):
-        raise ProfileError("show.scene must be auto, beat or ambient")
+    if show.scene not in ("auto", "beat", "ambient", "drive"):
+        raise ProfileError("show.scene must be auto, beat, ambient or drive")
     return Config(node=node, rate_hz=rate, patch=Patch(fixtures), audio=audio, show=show)

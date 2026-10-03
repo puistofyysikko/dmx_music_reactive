@@ -39,10 +39,13 @@ def main() -> None:
     mover_dim = np.array([tk.dmx["mover1"][7] for tk in ticks])
     rising = [i for i in range(1, len(strobe)) if strobe[i] >= 100 > strobe[i - 1]]
     ft = t[rising]
-    beat_mood = np.array([tk.mood == "beat" for tk in ticks])
+    beat_mood = np.array([tk.mood in ("beat", "drive") for tk in ticks])
     print(f"{args.path}: {t[-1]:.0f} s")
-    print(f"  beat scene {beat_mood.mean() * 100:.0f} % of the time, "
-          f"{int(np.sum(np.diff(beat_mood.astype(int)) != 0))} scene changes")
+    moods = [tk.mood for tk in ticks]
+    share = {m: moods.count(m) / len(moods) * 100 for m in ("beat", "drive", "ambient")}
+    changes = sum(1 for a, b in zip(moods, moods[1:], strict=False) if a != b)
+    print("  scenes: " + ", ".join(f"{m} {v:.0f} %" for m, v in share.items())
+          + f"  ({changes} scene changes)")
     if len(ft) > 1:
         print(f"  flashes {len(ft)}  (median interval {np.median(np.diff(ft)) * 1000:.0f} ms, "
               f"max rate {1 / np.min(np.diff(ft)):.1f} Hz)")

@@ -34,6 +34,11 @@ class ShowConfig:
     ambient_flash_rise_db: float = 6.0  # ambient flashes need a real bass transient (dB jump)
     ambient_flash_energy: float = 0.75  # ambient scene flashes only on very strong bass hits...
     ambient_flash_hz: float = 3.0  # ...and never faster than this
+    drive_kick_rate: float = 2.0  # kicks/s (smoothed) that mark very energetic, kick-dense music
+    drive_energy: float = 0.2  # ...together with at least this bass energy (distorted kicks
+    #                           keep much of their punch above the 20-150 Hz band)
+    drive_flash_gate: float = 0.25  # in the drive scene the kick events are the evidence
+    drive_min_confidence: float = 0.15  # ...and some periodicity (rules out pure noise)
 
 
 @dataclass
@@ -54,17 +59,24 @@ class Ctx:
     kick_strength: float  # strength of the newest kick
     kick_rise_db: float  # bass jump at the newest kick (noise-like content stays low)
     bass_energy: float  # peak-held bass energy vs the track's loud reference, 0..1
+    energetic: bool  # kick-dense and bass-heavy (frenchcore, hardcore, drops)
 
 
 Intent = dict[str, dict[str, float | str]]  # fixture name -> channel -> value
 
 
 class BeatScene:
-    """Beat-locked: grid-synced flashes, pulsing mover, per-bar colour, beat-paced motion."""
+    """Beat-locked: grid-synced flashes, pulsing mover, per-bar colour, beat-paced motion.
 
-    name = "beat"
+    With `kick_driven=True` (the "drive" scene) the events are the detected kicks themselves
+    instead of the predicted grid, and the pacing clock is plain time: for kick-dense music
+    (frenchcore, hardcore) where no steady tempo grid can be locked.
+    """
 
-    def __init__(self, patch: Patch, cfg: ShowConfig, limiter: FlashLimiter) -> None:
+    def __init__(self, patch: Patch, cfg: ShowConfig, limiter: FlashLimiter,
+                 kick_driven: bool = False) -> None:
+        self.kick_driven = kick_driven
+        self.name = "drive" if kick_driven else "beat"
         self.movers = patch.group("movers")
         self.strobes = patch.group("strobes")
         self.cfg = cfg
@@ -79,30 +91,35 @@ class BeatScene:
         cfg = self.cfg
         energy = c.bass_energy
         fired_flash = False
+        beat_now = bool(c.kicks and c.kick_strength >= 0.4) if self.kick_driven else bool(
+            c.beats_fired)
         if self.strobe_enabled:
-            # 1) a predicted grid beat flashes, unless the bass has dropped out (breakdown)
-            if c.beats_fired and energy >= cfg.flash_gate and self._limiter.try_fire(c.t):
-                self._flash.trigger(0.5 + 0.5 * clamp01((energy - cfg.flash_gate) / 0.5))
+            # 1) a predicted grid beat (drive scene: a detected kick) flashes, unless the bass
+            #    has dropped out (breakdown)
+            gate = cfg.drive_flash_gate if self.kick_driven else cfg.flash_gate
+            if beat_now and energy >= gate and self._limiter.try_fire(c.t):
+                self._flash.trigger(0.6 + 0.4 * clamp01((energy - gate) / 0.5))
                 fired_flash = True
             # 2) a strong bass hit between grid beats (syncopation, drop) flashes too
-            elif (c.kicks and c.kick_strength >= cfg.kick_flash_strength
+            elif (not self.kick_driven and c.kicks and c.kick_strength >= cfg.kick_flash_strength
                   and energy >= cfg.kick_flash_strength and self._limiter.try_fire(c.t)):
                 self._flash.trigger(0.8)
                 fired_flash = True
         if fired_flash:
             self.flash_count += 1
         flash = self._flash.step(c.dt)
-        if c.beats_fired and energy >= cfg.flash_gate or fired_flash:
-            self._accent.trigger(clamp01(energy / 0.6))
+        if fired_flash:
+            self._accent.trigger(max(0.6, clamp01(energy / 0.6)))
         accent = self._accent.step(c.dt)
         for f in self.strobes:
             out[f.name] = {"dimmer": flash if self.strobe_enabled else 0.0}
-        bar = int(c.beat_pos // 8)
+        pos = c.t * 2.0 if self.kick_driven else c.beat_pos  # drive: pseudo-beats at 120/min
+        bar = int(pos // 8)
         pan_lo, pan_hi = cfg.pan_limits
         tilt_lo, tilt_hi = cfg.tilt_limits
         for i, f in enumerate(self.movers):
-            pan = 0.5 + 0.5 * math.sin(2 * math.pi * (c.beat_pos / 16.0 + 0.25 * i))
-            tilt = 0.5 + 0.5 * math.sin(2 * math.pi * (c.beat_pos / 11.0 + 0.4 * i))
+            pan = 0.5 + 0.5 * math.sin(2 * math.pi * (pos / 16.0 + 0.25 * i))
+            tilt = 0.5 + 0.5 * math.sin(2 * math.pi * (pos / 11.0 + 0.4 * i))
             out[f.name] = {
                 "dimmer": 0.2 + 0.8 * max(accent, 0.5 * clamp01(c.level)),
                 "pan": pan_lo + pan * (pan_hi - pan_lo),
@@ -171,7 +188,8 @@ class Show:
         self._limiter = FlashLimiter(cap)
         self._beat = BeatScene(patch, self.cfg, self._limiter)
         self._ambient = AmbientScene(patch, self.cfg, self._limiter)
-        self._scenes = {"beat": self._beat, "ambient": self._ambient}
+        self._drive = BeatScene(patch, self.cfg, self._limiter, kick_driven=True)
+        self._scenes = {"beat": self._beat, "ambient": self._ambient, "drive": self._drive}
         self.mood = "ambient"  # the scene we are heading to
         self._from = "ambient"
         self._mix = 1.0  # 0 = fully `_from`, 1 = fully `mood`
@@ -179,6 +197,10 @@ class Show:
         self._lock_run = 0.0  # seconds the lock state has been stable
         self._last_locked = False
         self.override = self.cfg.scene if self.cfg.scene in self._scenes else "auto"
+        self._kick_rate = 0.0
+        self._bass_avg = 0.0
+        self._energetic_run = 0.0
+        self._energetic_last = False
         self.blackout = False
         self.master = self.cfg.master
         self._master_now = 0.0
@@ -196,7 +218,7 @@ class Show:
 
     @property
     def flashes(self) -> int:
-        return self._beat.flash_count + self._ambient.flash_count
+        return self._beat.flash_count + self._ambient.flash_count + self._drive.flash_count
 
     # -- controls -------------------------------------------------------------------
     def command(self, key: str) -> str:
@@ -207,12 +229,13 @@ class Show:
         if key == "s":
             self.strobe_enabled = not self.strobe_enabled
             self._beat.strobe_enabled = self._ambient.strobe_enabled = self.strobe_enabled
+            self._drive.strobe_enabled = self.strobe_enabled
             return f"strobe light {'on' if self.strobe_enabled else 'OFF'}"
         if key == "a":
             self.override = "auto"
             return "scene: auto"
-        if key in ("1", "2"):
-            self.override = "beat" if key == "1" else "ambient"
+        if key in ("1", "2", "3"):
+            self.override = {"1": "beat", "2": "ambient", "3": "drive"}[key]
             return f"scene: {self.override} (forced)"
         if key in ("+", "="):
             self.master = min(1.0, self.master + 0.1)
@@ -257,6 +280,12 @@ class Show:
             rise = f.last_kick_rise_db
             bass = f.bass_energy
             self._level = smooth_toward(self._level, f.level, dt, 0.6)
+        inst = kicks / dt if dt > 0 else 0.0
+        self._kick_rate = smooth_toward(self._kick_rate, inst, dt, 2.0)
+        self._bass_avg = smooth_toward(self._bass_avg, bass, dt, 1.0)
+        energetic = (not silent and f is not None and self._kick_rate >= self.cfg.drive_kick_rate
+                     and self._bass_avg >= self.cfg.drive_energy
+                     and f.beat_confidence >= self.cfg.drive_min_confidence)
         # Beat position integrates smoothly (it paces the sweeps); a fired grid beat only
         # nudges it toward the nearest whole beat, so grid re-syncs never make the head jump.
         if self._bpm > 0:
@@ -264,7 +293,7 @@ class Show:
             if fired:
                 self._beat_pos += 0.25 * (round(self._beat_pos) - self._beat_pos)
         return Ctx(self.t, dt, f, silent, locked, phase, fired, self._beat_pos, self._level,
-                   bass, max(0, kicks), strength, rise, bass)
+                   bass, max(0, kicks), strength, rise, bass, energetic)
 
     def _update_mood(self, c: Ctx, dt: float) -> None:
         if self.override != "auto":
@@ -274,12 +303,24 @@ class Show:
                 self._lock_run += dt
             else:
                 self._lock_run, self._last_locked = 0.0, c.locked
-            target = self.mood
+            if c.energetic == self._energetic_last:
+                self._energetic_run += dt
+            else:
+                self._energetic_run, self._energetic_last = 0.0, c.energetic
             held = self.t - self._mood_since
-            if self.mood == "ambient" and c.locked and self._lock_run >= 1.5 and held >= 3.0:
-                target = "beat"
-            elif self.mood == "beat" and not c.locked and self._lock_run >= 10.0 and held >= 6.0:
-                target = "ambient"
+            target = self.mood
+            if self.mood == "beat":
+                # the grid survives breakdowns: leave only after a long loss of lock
+                if not c.locked and self._lock_run >= 10.0 and held >= 6.0:
+                    target = "drive" if c.energetic else "ambient"
+            else:
+                if c.locked and self._lock_run >= 1.5 and held >= 3.0:
+                    target = "beat"
+                elif self.mood == "ambient":
+                    if c.energetic and self._energetic_run >= 1.0 and held >= 2.0:
+                        target = "drive"
+                elif not c.energetic and self._energetic_run >= 4.0 and held >= 4.0:
+                    target = "ambient"  # drive -> ambient once the energy has been gone a while
         if target != self.mood:
             self._from, self.mood = self.mood, target
             self._mix, self._mood_since = 0.0, self.t

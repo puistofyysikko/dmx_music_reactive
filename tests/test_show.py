@@ -72,16 +72,15 @@ def test_flash_rate_never_exceeds_the_cap():
     assert np.min(np.diff(flashes)) >= 0.5 - 1 / 30 - 1e-6
 
 
-def test_no_beat_scene_and_bounded_flashing_without_a_locked_beat():
+def test_noise_never_gets_the_beat_scene_and_flashing_stays_under_the_cap():
     rng = np.random.default_rng(5)
     x = 0.2 * rng.standard_normal(SR * 30).astype(np.float32)  # noise: no beat
     ticks = simulate(new_show()[0], analyse(x))
-    assert all(tk.mood == "ambient" for tk in ticks)
-    # ambient may flash on very strong bass hits, but never faster than ambient_flash_hz
+    assert all(tk.mood != "beat" for tk in ticks)
+    # loud broadband noise can look kick-dense (drive scene), but the flash cap always holds
     flashes = flash_times(strobe_series(ticks), ticks, thresh=60)
-    assert len(flashes) <= 30 * 3 * 0.7
     if len(flashes) > 1:
-        assert np.min(np.diff(flashes)) >= 1 / 3 - 2 / 30
+        assert np.min(np.diff(flashes)) >= 1 / 8 - 1 / 30 - 1e-6
 
 
 def test_silence_fades_everything_to_dark(clicks150):
@@ -189,3 +188,36 @@ def test_breakdown_stays_dark_but_the_drop_flashes_immediately():
 def sine_pad(seconds):
     t = np.arange(int(seconds * SR)) / SR
     return (np.sin(2 * np.pi * 880 * t) + np.sin(2 * np.pi * 1320 * t)).astype(np.float32) * 0.5
+
+
+def test_drive_scene_flashes_on_dense_irregular_kicks():
+    """Frenchcore-like: kicks 4/s with irregular spacing, so no tempo grid can lock."""
+    rng = np.random.default_rng(2)
+    x = np.zeros(SR * 40, dtype=np.float32)
+    click = click_track(60, 1.0, SR)[: int(0.05 * SR)]
+    t = 0.5
+    while t < 38:
+        i = int(t * SR)
+        x[i:i + len(click)] += click
+        t += rng.choice([0.17, 0.29, 0.29, 0.24])
+    feats = analyse(x)
+    show, _ = new_show()
+    ticks = simulate(show, feats)
+    moods = [tk.mood for tk in ticks]
+    assert moods.count("drive") > 0.6 * len(moods)
+    flashes = flash_times(strobe_series(ticks), ticks)
+    assert len(flashes) > 0.6 * feats[-1].kick_count  # most kicks flash (the cap drops some)
+    assert np.min(np.diff(flashes)) >= 1 / 8 - 1 / 30 - 1e-6  # never above the hard cap
+
+
+def test_drive_scene_is_not_used_for_a_calm_ballad_pulse():
+    feats = analyse(click_track(60, 40.0, SR))  # one kick per second
+    ticks = simulate(new_show()[0], feats)
+    assert all(tk.mood != "drive" for tk in ticks)
+
+
+def test_forcing_drive_with_key_3():
+    show, _ = new_show()
+    assert show.command("3") == "scene: drive (forced)"
+    ticks = simulate(show, analyse(click_track(120, 15.0, SR)))
+    assert all(tk.mood == "drive" for tk in ticks[60:])

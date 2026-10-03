@@ -491,7 +491,7 @@ Code: `engine/show.py` (Show: scenes, mood switching, safety, hotkeys; pure logi
 Behaviour:
 - **Scenes:** `ambient` (default, no reliable beat): mover breathes with loudness, slow pan/tilt wander (45 s / 31 s periods), slow colour drift (20 s), strobe light dark. `beat` (when `beat_locked`): Pot Strobe flashes on every predicted grid beat (dimmer pulse, 70 ms decay, fired `beat_lead_ms`=30 ms early using the phase extrapolated to "now"); mover pulses on the beat, pan/tilt paced by beats (16/11-beat periods), colour changes every 8 beats. Auto mood switch: ambient→beat after lock ≥ 2 s and ≥ 6 s dwell; beat→ambient after unlock ≥ 4 s; 1.5 s crossfade.
 - **Safety:** flash rate limiter (`max_flash_hz` ≤ 10, default 8) applied to every flash; built-in strobe channels are never used (forced off); pan/tilt limited to `pan_limits`/`tilt_limits` with slew limiting (0.8 /s); colour wheel changes ≥ 1.5 s apart; `master` ceiling; silence or lost audio fades all dimmers to 0 (2 s); blackout key immediate; every exit path sends blackout frames.
-- **Hotkeys:** `b` blackout toggle, `s` strobe light on/off, `a` auto, `1` force beat, `2` force ambient, `+`/`-` master, Ctrl-C quit.
+- **Hotkeys:** `b` blackout toggle, `s` strobe light on/off, `a` auto, `1` force beat, `2` force ambient, `3` force drive, `+`/`-` master, Ctrl-C quit.
 - Analysis exceptions are caught per frame (lights stay alive); render loop never blocks on audio.
 
 Verification (no hardware): 13 show tests (scene switching, flash timing vs true clicks within ~1 frame, rate cap, no flashing without lock, silence/no-audio dark, blackout/strobe keys, limits, colour rate limit, crossfade, <1 ms per tick); simulation on user tracks — Falco 87 % beat scene, 2.7 Hz max flash rate; Timeless 72 %; karaoke 81 %; Ti Amo 27 %; real-time end-to-end run against the fake node: 30.2 packets/s, 0 sequence gaps, final frame blackout, ~25 % of one core for the whole pipeline.
@@ -511,6 +511,22 @@ User's first real-rig run: ambient mode looked good; (1) the spot sometimes "doe
 Findings: the kick "rise" (bass jump) is *not* a reliable transient test (hardstyle median rise 4–6 dB vs noise 8 dB), so it is only used for the ambient-scene flash; beat-scene flashes rely on the verified grid + bass energy. New config keys (`show:`): `flash_gate`, `kick_flash_strength`, `ambient_flash_energy`, `ambient_flash_rise_db`, `ambient_flash_hz`. New Features: `bass_energy`, `last_kick_strength`, `last_kick_rise_db`. 76 tests pass.
 
 Still to verify on the rig: whether the hesitation is gone in ambient mode too (ambient motor speed 0.6 may still be too fast for the slow wander; slower speed + fewer target updates is the next lever); whether flash gating feels right on live material.
+
+## 13c-5. Day 2 (continued): frenchcore "LSD Problem" and the drive scene
+
+User feedback: Timeless/Digital Playground work well; no movement hesitation/jitter observed any more; **Sefa & Mr. Ivex – LSD Problem** (frenchcore) barely flashed although it should "blink a lot" (baseline in simulation: beat scene 6 %, **2 flashes in 227 s**).
+
+Diagnosis (`tools/analyze_track.py`, autocorrelation, kick IOI histograms, comb scores):
+- True tempo ≈ **207 BPM** (autocorrelation 0.87 at 206.7, also 105 and 70); the tempo search stopped at 200 BPM, so the tracker sat at 105 (half-time) or 140 (2:3) and `beat_locked` was true only 5 % of the time. Kick IOIs are ~290 ms in some sections and ~170 ms (rolling) in others, i.e. no steady grid.
+- The distorted kick keeps much of its punch above 150 Hz, so the 20–150 Hz `bass_energy` reads 0.2–0.5 and the energy gate suppressed most flashes.
+
+Fixes:
+1. `BPM_MAX` 200 → **240**; **half-time preference**: if 2× the winning tempo has a comb score ≥ 85 % of the winner's, take the faster pulse (a prior-overruling switch is judged on raw comb support so hysteresis cannot block it). Ordinary 90/105/120 BPM click tracks are not doubled (tested); 207 and 215 BPM click tracks lock; Digital Playground locks better (80 % vs 66 %). Limit: a 225 BPM click does not double because clicks that fall between analysis frames lose half their amplitude in the comb interpolation; real kicks smear over 2+ frames.
+2. New **`drive` scene** (third scene next to `beat` and `ambient`): when kicks are dense (≥ 2.0 kicks/s smoothed), bass energy ≥ 0.2 and some periodicity (confidence ≥ 0.15) but no verified beat lock, **each detected kick flashes** (gate `drive_flash_gate` 0.25 bass energy; same 8 Hz hard cap) and pulses the mover; motion is paced by time (pseudo 120 BPM), colour changes every 4 s. Mood rules: `beat` (verified grid) has priority; ambient→drive after 1 s of energetic; drive→ambient after 4 s without; beat→drive/ambient only after 10 s unlocked. Key `3` forces drive; `scene: drive` in config.
+
+Result (simulation, 100–120 s): LSD Problem **2 → ~170 flashes** (drive scene ≈ 85 % of the time, median flash interval 300 ms), real-time end-to-end run (30 s, fake node): 81 flashes, 30.1 packets/s, no gaps, final blackout, 34 % of one core. Other tracks unchanged or better; flashes in low-bass moments: Poison 1 %, Timeless 2 %, Falco ~13 %, Digital Playground/LSD ≈ 10–18 % (gate sweep: gate 0.1/0.2/0.3 → LSD 194/169/146 flashes and 26/18/10 % low-bass; chosen 0.25 as the compromise; tune `drive_flash_gate`). 83 tests pass.
+
+Known trade-off: loud broadband noise also reads as kick-dense (≈ 3 kicks/s, confidence 0.16) and enters drive, flashing at ≤ 3/s under the 8 Hz cap; a real discriminator (kick-interval structure) would be needed if that ever matters.
 
 ## 13d. Later hardware measurements (camera)
 

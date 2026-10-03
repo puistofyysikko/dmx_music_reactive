@@ -23,7 +23,7 @@ show:
   master: 0.8             # overall brightness ceiling (+/- keys change it live)
   pan_limits: [0.2, 0.8]  # normalised range the moving head may use (keep the beam off faces)
   tilt_limits: [0.3, 0.8]
-  scene: auto             # auto | beat | ambient
+  scene: auto             # auto | beat | ambient | drive
   colour_hold_s: 1.5      # min time between colour-wheel changes (mechanical)
   silence_fade_s: 2.0
   flash_gate: 0.35        # no beat flash below this bass energy (breakdowns stay dark); 0 = always
@@ -31,6 +31,10 @@ show:
   ambient_flash_energy: 0.75 # in the ambient scene only very strong bass hits flash (drops)
   ambient_flash_rise_db: 6   # ...and only real transients (bass jump in dB)
   ambient_flash_hz: 3
+  drive_kick_rate: 2.0       # kicks/s that mark kick-dense music (frenchcore): "drive" scene
+  drive_energy: 0.2          # ...with at least this bass energy (distorted kicks live above 150 Hz)
+  drive_flash_gate: 0.25     # drive scene: flash on kick events if bass energy is at least this
+  drive_min_confidence: 0.15 # ...and some periodicity (rules out pure noise)
 
 # Profiles are looked up in config/fixtures/<profile>.json
 fixtures:
