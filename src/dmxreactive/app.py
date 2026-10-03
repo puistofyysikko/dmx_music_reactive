@@ -22,6 +22,7 @@ def run_output(
     duration_s: float | None = None,
     host: str | None = None,
     port: int | None = None,
+    on_start: Callable[[FrameLoop, ArtNetSender], None] | None = None,
 ) -> tuple[FrameLoop, ArtNetSender]:
     """Run `on_tick(t)` at the configured rate and send the patch each frame.
 
@@ -39,6 +40,8 @@ def run_output(
         sender.send(universe)
 
     loop = FrameLoop(config.rate_hz, tick)
+    if on_start:
+        on_start(loop, sender)
     previous = {s: signal.signal(s, lambda *_: loop.stop_event.set())
                 for s in (signal.SIGINT, signal.SIGTERM)}
     try:

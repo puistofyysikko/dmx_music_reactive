@@ -86,9 +86,14 @@ def main() -> int:
     print(f"paired {len(lags)}/{len(clicks)} clicks: flash minus click = median {med:+.0f} ms "
           f"(p10 {q[0]:+.0f}, p90 {q[1]:+.0f}, spread {q[1] - q[0]:.0f} ms)")
     print("  (+ = light late, - = light early; the light is meant to be ~0)")
-    print(f"  suggested beat_lead_ms: {args.lead + med:.0f}  (was {args.lead:g}; frame-quantised "
+    suggested = args.lead + med
+    print(f"  suggested beat_lead_ms: {suggested:.0f}  (was {args.lead:g}; frame-quantised "
           f"clips are good to about +-{1000 / fps:.0f} ms, plus speaker/room sound delay of "
           f"~{3:d} ms per metre)")
+    if suggested < 0:
+        print(f"  the sound arrives late (Bluetooth speaker?): keep beat_lead_ms at its wired "
+              f"value and set show.light_delay_ms to about {-suggested + args.lead:.0f} instead "
+              f"(that also delays kick-triggered flashes, which a lead cannot do)")
     return 0
 
 

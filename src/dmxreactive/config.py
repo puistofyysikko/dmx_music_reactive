@@ -97,6 +97,7 @@ def load_config(path: str | Path | None = None) -> Config:
         scene=str(sh.get("scene", d.scene)),
         colour_hold_s=float(sh.get("colour_hold_s", d.colour_hold_s)),
         silence_fade_s=float(sh.get("silence_fade_s", d.silence_fade_s)),
+        light_delay_ms=float(sh.get("light_delay_ms", d.light_delay_ms)),
         flash_gate=float(sh.get("flash_gate", d.flash_gate)),
         kick_flash_strength=float(sh.get("kick_flash_strength", d.kick_flash_strength)),
         ambient_flash_rise_db=float(sh.get("ambient_flash_rise_db", d.ambient_flash_rise_db)),
@@ -119,6 +120,8 @@ def load_config(path: str | Path | None = None) -> Config:
     )
     if not 0.0 < show.max_flash_hz <= 10.0:
         raise ProfileError("show.max_flash_hz must be in (0, 10]")
+    if not 0.0 <= show.light_delay_ms <= 600.0:
+        raise ProfileError("show.light_delay_ms must be between 0 and 600")
     if show.mover_flash_mode not in ("strobe", "dimmer"):
         raise ProfileError("show.mover_flash_mode must be strobe or dimmer")
     if not 0.0 < show.mover_flash_hz <= 10.0:

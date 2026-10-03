@@ -39,6 +39,7 @@ class ShowConfig:
     scene: str = "auto"  # auto | beat | ambient
     colour_hold_s: float = 1.5  # minimum time between colour-wheel changes
     silence_fade_s: float = 2.0
+    light_delay_ms: float = 0.0  # delay the lights (e.g. +150..250 for a Bluetooth speaker)
     flash_gate: float = 0.35  # no beat flash below this bass energy (breakdowns stay dark)
     kick_flash_strength: float = 0.6  # off-grid kicks this strong (and bass this high) flash too
     ambient_flash_rise_db: float = 6.0  # ambient flashes need a real bass transient (dB jump)
@@ -259,6 +260,10 @@ class Show:
         self._last_drop = -1e9
         self._blast_t0: float | None = None
         self._force_white = False
+        self.events: deque[tuple[float, str]] = deque(maxlen=8)  # (show time, message) for the UI
+        self.drops = 0
+        self.last_beat_t = self.last_kick_t = self.last_flash_t = -1e9
+        self._flash_total = 0
         self._bass_avg = 0.0
         self._energetic_run = 0.0
         self._energetic_last = False
@@ -282,8 +287,17 @@ class Show:
         return self._beat.flash_count + self._ambient.flash_count + self._drive.flash_count
 
     # -- controls -------------------------------------------------------------------
+    def log_event(self, message: str) -> None:
+        self.events.append((self.t, message))
+
     def command(self, key: str) -> str:
         """Handle a hotkey; returns a short status message."""
+        msg = self._command(key)
+        if msg:
+            self.log_event(msg)
+        return msg
+
+    def _command(self, key: str) -> str:
         if key == "b":
             self.blackout = not self.blackout
             return "BLACKOUT" if self.blackout else "blackout off"
@@ -315,9 +329,18 @@ class Show:
         silent = stale or f.silent
         ctx = self._context(f, age_s, dt, silent, stale)
         self._update_mood(ctx, dt)
+        if ctx.beats_fired:
+            self.last_beat_t = self.t
+        if ctx.kicks:
+            self.last_kick_t = self.t
+        if self.flashes != self._flash_total:
+            self._flash_total = self.flashes
+            self.last_flash_t = self.t
         intents = self._blend(ctx, dt)
         if ctx.drop:
             self._blast_t0, self._force_white = self.t, True
+            self.drops += 1
+            self.log_event("DROP -> blast")
             log.info("drop -> blast")
         self._overlay_blast(intents)
         self._update_master(silent, dt)
@@ -447,6 +470,7 @@ class Show:
             self._from, self.mood = self.mood, target
             self._mix, self._mood_since = 0.0, self.t
             log.info("scene -> %s", target)
+            self.log_event(f"scene -> {target}")
         self._mix = min(1.0, self._mix + dt / 1.5)
 
     def _blend(self, c: Ctx, dt: float) -> Intent:

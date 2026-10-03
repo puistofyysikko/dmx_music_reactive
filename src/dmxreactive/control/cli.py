@@ -240,7 +240,7 @@ def cmd_record(args) -> int:
 def cmd_run(args) -> int:
     """Run the live show: capture -> analysis -> effects -> lights."""
     from dmxreactive.audio.factory import create_source
-    from dmxreactive.live import run_live
+    from dmxreactive.live import run_live, status_line
 
     config = load_config(args.config)
     if args.flash_path != "both":
@@ -252,10 +252,31 @@ def cmd_run(args) -> int:
     host, _, port = (args.target or "").partition(":")
     source = create_source(config.audio, args.file, args.device, loop=args.loop)
     where = f"{host or config.node.host}:{port or config.node.port}"
-    print(f"Live show -> {where}  ({'file ' + args.file if args.file else 'live capture'}). "
-          "Strobe flashes are capped; blackout key: b; quit: Ctrl-C.")
-    show = run_live(config, source, host or None, int(port) if port else None,
-                    args.seconds, keys=not args.no_keys, scene=args.scene)
+    use_tui = sys.stdout.isatty() and not args.plain
+    ui = {"thread": None, "n": 0}
+
+    def status(state) -> None:
+        if use_tui:
+            if ui["thread"] is None:
+                from dmxreactive.control.tui import StatusThread
+
+                ui["thread"] = StatusThread(state)
+                ui["thread"].start()
+        else:
+            ui["n"] += 1
+            if ui["n"] % 8 == 1:  # ~every 2 s
+                print(status_line(state), flush=True)
+
+    if not use_tui:
+        print(f"Live show -> {where}  ({'file ' + args.file if args.file else 'live capture'}). "
+              "Strobe flashes are capped; blackout key: b; quit: Ctrl-C.")
+    try:
+        show = run_live(config, source, host or None, int(port) if port else None,
+                        args.seconds, keys=not args.no_keys, scene=args.scene, status=status,
+                        on_message=None if use_tui else lambda m: print(f"[{m}]", flush=True))
+    finally:
+        if ui["thread"] is not None:
+            ui["thread"].stop()
     print(f"Done, blackout sent. Flash events fired: {show.flashes}")
     return 0
 
@@ -300,6 +321,22 @@ def cmd_pulse_test(args) -> int:
                port=int(port) if port else None)
     print("Done, blackout sent")
     return 0
+
+
+def cmd_preflight(args) -> int:
+    """Check network, node, audio and config before a show; optionally walk the fixtures."""
+    from dmxreactive.control.preflight import format_checks, ok, run_preflight
+
+    config = load_config(args.config)
+    print("Pre-flight checks")
+    checks = run_preflight(config, audio=not args.no_audio)
+    print(format_checks(checks))
+    good = ok(checks)
+    print("\nAll clear." if good else "\nFix the items marked ✘ before the show.")
+    if args.walk and good:
+        print("\nChannel walk (watch the fixtures; Ctrl-C = blackout)...")
+        return cmd_test_fixtures(args)
+    return 0 if good else 1
 
 
 def cmd_hold(args) -> int:
@@ -380,6 +417,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--seconds", type=float, help="stop after this many seconds")
     p.add_argument("--scene", choices=["auto", "beat", "ambient", "drive"], help="force a scene")
     p.add_argument("--no-keys", action="store_true", help="disable hotkeys")
+    p.add_argument("--plain", action="store_true", help="plain text status instead of the panel")
     p.add_argument("--flash-path", choices=["both", "grid", "kick"], default="both",
                    help="latency-test aid: strobe only on predicted beats (grid) or only on "
                    "detected kicks (kick)")
@@ -406,6 +444,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--hz", type=float, default=6.0, help="strobe rate for --mode strobe (capped)")
     p.add_argument("--target")
     p.set_defaults(func=cmd_pulse_test)
+
+    p = sub.add_parser("preflight", help="check network, node (ArtPoll), audio and config")
+    p.add_argument("--no-audio", action="store_true", help="skip the audio capture check")
+    p.add_argument("--walk", action="store_true", help="after the checks, walk all fixtures")
+    p.add_argument("--target", help="override node as host[:port]")
+    p.add_argument("--step-seconds", type=float, default=1.5)
+    p.set_defaults(func=cmd_preflight)
 
     p = sub.add_parser("hold", help="hold channel values on one fixture, e.g. hold mover1 pan=0.2")
     p.add_argument("fixture")

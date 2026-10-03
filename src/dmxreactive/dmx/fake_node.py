@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import socket
+import struct
 import threading
 import time
 
-from dmxreactive.dmx.artnet import parse_artdmx
+from dmxreactive.dmx.artnet import build_artpollreply, parse_artdmx
 
 
 class FakeNode:
-    def __init__(self, host: str = "127.0.0.1", port: int = 0, history_channels: int = 0) -> None:
+    def __init__(self, host: str = "127.0.0.1", port: int = 0, history_channels: int = 0,
+                 poll_reply_to: tuple[str, int] | None = None, port_address: int = 0) -> None:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._sock.bind((host, port))
         self._sock.settimeout(0.1)
@@ -23,6 +25,9 @@ class FakeNode:
         self.sequence_gaps = 0
         self.arrival_times: list[float] = []
         self._history_channels = history_channels
+        self._poll_reply_to = poll_reply_to  # where to send ArtPollReply (None: don't answer)
+        self._advertised = port_address  # what an ArtPollReply claims
+        self.polls = 0
         self.history: list[tuple[float, bytes]] = []  # (arrival time, first N channels)
         self._last_seq = 0
         self._stop = threading.Event()
@@ -52,6 +57,13 @@ class FakeNode:
             except OSError:
                 return
             now = time.perf_counter()
+            if self._poll_reply_to and len(data) >= 10 and data[:8] == b"Art-Net\x00" and (
+                    struct.unpack("<H", data[8:10])[0] == 0x2000):
+                self.polls += 1
+                pa = self._advertised
+                reply = build_artpollreply(self.host, (pa >> 8) & 0x7F, (pa >> 4) & 0x0F, pa & 0x0F)
+                self._sock.sendto(reply, self._poll_reply_to)
+                continue
             try:
                 pkt = parse_artdmx(data)
             except ValueError:

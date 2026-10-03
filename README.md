@@ -4,7 +4,7 @@ Music-reactive DMX lighting. Audio is captured from the sound card's output moni
 
 Target rig: Eurolite DXT PoE Art-Net Node I, Fun Generation PicoSpot 20 LED (moving head) and LED Pot Strobe 100. Linux (Fedora KDE) only. Full plan and fixture channel maps: [PROJECT_MEMO.md](PROJECT_MEMO.md).
 
-**Status:** Phase 0–1 done and hardware-verified (Art-Net output, fixture profiles, fake node, channel walker, strobe calibration tools). Phase 3 (audio capture) and Phase 4 (analysis: bands, kicks, tempo/beat tracking) work; Phase 5 (effects engine + live runtime) is done in software and tested against a fake node; real-rig tuning is next.
+**Status:** Phase 0–1 done and hardware-verified (Art-Net output, fixture profiles, fake node, channel walker, strobe calibration tools). Phase 3 (audio capture) and Phase 4 (analysis: bands, kicks, tempo/beat tracking) work; Phase 5 (effects engine + live runtime) is done in software and tested against a fake node; real-rig tuning and launcher/preflight/status panel are done; the event checklist is in `docs/EVENT_CHECKLIST.md`.
 
 ## Setup
 
@@ -22,6 +22,9 @@ cp config/config.example.yaml config/config.yaml   # then edit node IP / patch
 .venv/bin/dmxreactive test-fixtures                 # same, against the real node (strobe <= 3 Hz)
 .venv/bin/dmxreactive list-devices                  # audio sources (default output's monitor is marked)
 .venv/bin/dmxreactive meter                         # live level of whatever the laptop is playing
+.venv/bin/dmxreactive preflight                     # checks: network, node (ArtPoll), audio, config
+scripts/start_show.sh                               # one-click: pre-flight, then the live show panel
+scripts/install_desktop_entry.sh                    # optional KDE launcher "DMX Music Reactive"
 .venv/bin/dmxreactive run                           # LIVE SHOW: music from the laptop -> lights (b = blackout)
 .venv/bin/dmxreactive run --file song.mp3 --target 127.0.0.1:16454   # same, from a file, into the sim
 .venv/bin/dmxreactive analyze                       # live view: bands, BPM, beat/kick markers
