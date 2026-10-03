@@ -39,6 +39,9 @@ class ShowConfig:
     #                           keep much of their punch above the 20-150 Hz band)
     drive_flash_gate: float = 0.25  # in the drive scene the kick events are the evidence
     drive_min_confidence: float = 0.15  # ...and some periodicity (rules out pure noise)
+    mover_flash_every: int = 4  # every Nth flash event the moving head flashes too (0 = never)
+    breath_period_s: float = 7.0  # ambient scene: the moving head's brightness breathes at this
+    breath_depth: float = 0.6  # ...dipping to (1 - depth) of its level at the bottom
 
 
 @dataclass
@@ -60,6 +63,7 @@ class Ctx:
     kick_rise_db: float  # bass jump at the newest kick (noise-like content stays low)
     bass_energy: float  # peak-held bass energy vs the track's loud reference, 0..1
     energetic: bool  # kick-dense and bass-heavy (frenchcore, hardcore, drops)
+    drop: bool  # bass returned strongly after >= 1.5 s of little bass (a drop), once
 
 
 Intent = dict[str, dict[str, float | str]]  # fixture name -> channel -> value
@@ -83,8 +87,17 @@ class BeatScene:
         self._limiter = limiter
         self._flash = Decay(cfg.flash_decay_ms / 1000.0)
         self._accent = Decay(0.25)
+        self._mover_flash = Decay(0.09, full_first_frame=True)
+        self._events = 0
         self.strobe_enabled = True
         self.flash_count = 0
+
+    def _count_event(self) -> None:
+        """Every Nth flash event the moving head flashes along."""
+        self._events += 1
+        every = self.cfg.mover_flash_every
+        if every and self._events % every == 0:
+            self._mover_flash.trigger(1.0)
 
     def render(self, c: Ctx) -> Intent:
         out: Intent = {}
@@ -93,24 +106,32 @@ class BeatScene:
         fired_flash = False
         beat_now = bool(c.kicks and c.kick_strength >= 0.4) if self.kick_driven else bool(
             c.beats_fired)
-        if self.strobe_enabled:
+        if self.strobe_enabled and c.drop and self._limiter.try_fire(c.t):
+            # the drop has priority over an ordinary beat on the same tick: everything flashes
+            self._flash.trigger(1.0)
+            self._mover_flash.trigger(1.0)
+            fired_flash = True
+        elif self.strobe_enabled:
             # 1) a predicted grid beat (drive scene: a detected kick) flashes, unless the bass
             #    has dropped out (breakdown)
             gate = cfg.drive_flash_gate if self.kick_driven else cfg.flash_gate
             if beat_now and energy >= gate and self._limiter.try_fire(c.t):
                 self._flash.trigger(0.6 + 0.4 * clamp01((energy - gate) / 0.5))
                 fired_flash = True
-            # 2) a strong bass hit between grid beats (syncopation, drop) flashes too
+                self._count_event()
+            # 2) a strong bass hit between grid beats (syncopation) flashes too
             elif (not self.kick_driven and c.kicks and c.kick_strength >= cfg.kick_flash_strength
                   and energy >= cfg.kick_flash_strength and self._limiter.try_fire(c.t)):
                 self._flash.trigger(0.8)
                 fired_flash = True
+                self._count_event()
         if fired_flash:
             self.flash_count += 1
         flash = self._flash.step(c.dt)
         if fired_flash:
             self._accent.trigger(max(0.6, clamp01(energy / 0.6)))
         accent = self._accent.step(c.dt)
+        mover_flash = self._mover_flash.step(c.dt)
         for f in self.strobes:
             out[f.name] = {"dimmer": flash if self.strobe_enabled else 0.0}
         pos = c.t * 2.0 if self.kick_driven else c.beat_pos  # drive: pseudo-beats at 120/min
@@ -121,7 +142,7 @@ class BeatScene:
             pan = 0.5 + 0.5 * math.sin(2 * math.pi * (pos / 16.0 + 0.25 * i))
             tilt = 0.5 + 0.5 * math.sin(2 * math.pi * (pos / 11.0 + 0.4 * i))
             out[f.name] = {
-                "dimmer": 0.2 + 0.8 * max(accent, 0.5 * clamp01(c.level)),
+                "dimmer": max(0.12 + 0.35 * clamp01(c.level), 0.7 * accent, mover_flash),
                 "pan": pan_lo + pan * (pan_hi - pan_lo),
                 "tilt": tilt_lo + tilt * (tilt_hi - tilt_lo),
                 "speed": 1.0,
@@ -143,27 +164,40 @@ class AmbientScene:
         self._limiter = limiter  # the shared hard cap
         self._own = FlashLimiter(cfg.ambient_flash_hz)
         self._flash = Decay(cfg.flash_decay_ms / 1000.0)
+        self._mover_flash = Decay(0.09, full_first_frame=True)
         self.strobe_enabled = True
         self.flash_count = 0
 
     def render(self, c: Ctx) -> Intent:
         cfg = self.cfg
-        if (self.strobe_enabled and c.kicks and c.kick_strength >= cfg.ambient_flash_energy
+        if self.strobe_enabled and c.drop and self._limiter.try_fire(c.t):
+            self._flash.trigger(1.0)
+            self._mover_flash.trigger(1.0)
+            self.flash_count += 1
+        elif (self.strobe_enabled and c.kicks and c.kick_strength >= cfg.ambient_flash_energy
                 and c.kick_rise_db >= cfg.ambient_flash_rise_db
                 and c.bass_energy >= cfg.ambient_flash_energy and self._own.try_fire(c.t)
                 and self._limiter.try_fire(c.t)):
             self._flash.trigger(0.7)
             self.flash_count += 1
         flash = self._flash.step(c.dt)
+        mover_flash = self._mover_flash.step(c.dt)
         out: Intent = {f.name: {"dimmer": flash if self.strobe_enabled else 0.0}
                        for f in self.strobes}
         pan_lo, pan_hi = cfg.pan_limits
         tilt_lo, tilt_hi = cfg.tilt_limits
+        base = 0.15 + 0.5 * clamp01(c.level)  # follows the music's loudness...
+
+        def breath(i: int) -> float:
+            """...and slowly breathes: 1 at the top, (1 - depth) at the bottom of each cycle."""
+            cycle = 0.5 + 0.5 * math.cos(2 * math.pi * (c.t / cfg.breath_period_s + 0.12 * i))
+            return 1.0 - cfg.breath_depth * (1.0 - cycle)
+
         for i, f in enumerate(self.movers):
             pan = 0.5 + 0.5 * math.sin(2 * math.pi * (c.t / 45.0 + 0.3 * i))
             tilt = 0.5 + 0.5 * math.sin(2 * math.pi * (c.t / 31.0 + 0.5 + 0.2 * i))
             out[f.name] = {
-                "dimmer": 0.15 + 0.5 * clamp01(c.level),
+                "dimmer": max(base * breath(i), mover_flash),
                 "pan": pan_lo + pan * (pan_hi - pan_lo),
                 "tilt": tilt_lo + tilt * (tilt_hi - tilt_lo),
                 "speed": 0.6,
@@ -198,6 +232,7 @@ class Show:
         self._last_locked = False
         self.override = self.cfg.scene if self.cfg.scene in self._scenes else "auto"
         self._kick_rate = 0.0
+        self._low_run = 0.0
         self._bass_avg = 0.0
         self._energetic_run = 0.0
         self._energetic_last = False
@@ -261,6 +296,7 @@ class Show:
     def _context(self, f: Features | None, age_s: float, dt: float, silent: bool,
                  stale: bool) -> Ctx:
         phase, fired, kicks, locked, strength, bass, rise = 0.0, 0, 0, False, 0.0, 0.0, 0.0
+        drop = False
         if f is not None and not stale:
             locked = f.beat_locked and f.bpm > 0
             if f.bpm > 0:
@@ -279,6 +315,7 @@ class Show:
             strength = f.last_kick_strength
             rise = f.last_kick_rise_db
             bass = f.bass_energy
+            drop = self._detect_drop(bass, dt)
             self._level = smooth_toward(self._level, f.level, dt, 0.6)
         inst = kicks / dt if dt > 0 else 0.0
         self._kick_rate = smooth_toward(self._kick_rate, inst, dt, 2.0)
@@ -293,7 +330,19 @@ class Show:
             if fired:
                 self._beat_pos += 0.25 * (round(self._beat_pos) - self._beat_pos)
         return Ctx(self.t, dt, f, silent, locked, phase, fired, self._beat_pos, self._level,
-                   bass, max(0, kicks), strength, rise, bass, energetic)
+                   bass, max(0, kicks), strength, rise, bass, energetic, drop)
+
+    def _detect_drop(self, bass: float, dt: float) -> bool:
+        """True once when strong bass returns after at least 1.5 s of (almost) none."""
+        if bass < 0.3:
+            self._low_run += dt
+        elif bass >= 0.6:
+            drop = self._low_run >= 1.5
+            self._low_run = 0.0
+            return drop
+        else:
+            self._low_run = max(0.0, self._low_run - dt)
+        return False
 
     def _update_mood(self, c: Ctx, dt: float) -> None:
         if self.override != "auto":

@@ -528,6 +528,18 @@ Result (simulation, 100–120 s): LSD Problem **2 → ~170 flashes** (drive scen
 
 Known trade-off: loud broadband noise also reads as kick-dense (≈ 3 kicks/s, confidence 0.16) and enters drive, flashing at ≤ 3/s under the 8 Hz cap; a real discriminator (kick-interval structure) would be needed if that ever matters.
 
+## 13c-6. Day 2 (continued): moving-head flashes, ambient breathing, drops
+
+User tested with many songs: "all looks awesome"; asked for (a) the moving head to flash sometimes and (b) its brightness to "breathe" in ambient mode (neither was planned beyond Phase 6 ideas).
+
+Implemented (`engine/show.py`, `engine/primitives.py`):
+- **Mover flash:** every Nth flash event (default N = 4, `mover_flash_every`, 0 = off) the moving head flashes along with the strobe (dimmer to full master for ~90 ms, full level on the first frame via `Decay(full_first_frame=True)`). Ordinary beat pulses were lowered (peak 0.7, base 0.12 + 0.35·level) so flashes stand out. Mover flashes obey the same flash limiter and the `s` key (**`s` now means "all flashing off"**: strobe light and mover flashes; pulses and motion continue).
+- **Ambient breathing:** the mover's brightness follows the music's loudness and breathes slowly on top (`breath_period_s` 7 s, `breath_depth` 0.6 → dips to 40 % of its level; 0 disables; per-mover phase offset 0.12).
+- **Drop detection (new, also Phase 6 groundwork):** `Ctx.drop` fires once when `bass_energy` returns to ≥ 0.6 after ≥ 1.5 s below 0.3. In every scene a drop flashes the strobe at full level and the mover together, and it has priority over an ordinary beat on the same tick.
+- Simulation on the user's tracks (100 s each): mover flashes ≈ 1/3 of strobe flashes (LSD 57 vs 162, Timeless 53 vs 182, Falco 35 vs 127); ambient mover dimmer swings 0.02–0.45 (silence fades included). 87 tests pass (breathing period ≈ 7 s via FFT, flash every 4th event, disable paths, drop flashes both).
+
+Open question for the user: master brightness feels right? Ambient peak brightness is modest (≈ 0.35–0.45 of full at master 0.8) — tune `master`/base level if the ambient look should be brighter.
+
 ## 13d. Later hardware measurements (camera)
 
 - **TODO (optional, precision): high-frame-rate strobe re-measurement.** The user recalls the a6000 can record at much higher frame rates once its settings are found again (to our knowledge the a6000 tops out at 1080/60p, so this is unconfirmed; if it is not possible, a phone's 240 fps slow-motion mode, or a photodiode/LDR into the sound card's line-in analysed as audio, would give kHz-level timing). Goals: (1) measure the Pot Strobe above 10 Hz (10–19 Hz is extrapolated) and the PicoSpot up to 25 Hz before ever raising `safe_max_hz`; (2) measure flash pulse width; (3) measure end-to-end audio→light latency (click track on the laptop → flash). Use `strobe-sweep --max-value` and `tools/strobe_analyze.py` (the analyser's ~10 Hz limit is a 60 fps limit, not an algorithm limit). Millisecond precision is a nice-to-have, not a requirement for the party use.

@@ -221,3 +221,51 @@ def test_forcing_drive_with_key_3():
     assert show.command("3") == "scene: drive (forced)"
     ticks = simulate(show, analyse(click_track(120, 15.0, SR)))
     assert all(tk.mood == "drive" for tk in ticks[60:])
+
+
+def steady_tone_feats(seconds=45):
+    return analyse(0.3 * sine_pad(seconds))
+
+
+def test_ambient_mover_breathes_slowly_and_can_be_switched_off():
+    feats = steady_tone_feats(45)
+    breathing = mover(simulate(new_show(scene="ambient")[0], feats), 7)[150:].astype(float)
+    flat = mover(simulate(new_show(scene="ambient", breath_depth=0.0)[0], feats), 7)[150:]
+    flat = flat.astype(float)
+    assert breathing.max() / max(breathing.min(), 1) > 2.0  # clear dips and swells
+    assert flat.max() / max(flat.min(), 1) < 1.15  # depth 0: steady
+    spectrum = np.abs(np.fft.rfft(breathing - breathing.mean()))
+    freqs = np.fft.rfftfreq(len(breathing), 1 / 30)
+    assert abs(1 / freqs[int(np.argmax(spectrum))] - 7.0) < 1.0  # breathing period ~ 7 s
+
+
+def test_mover_flashes_on_every_fourth_flash_event(clicks150):
+    show, _ = new_show(scene="beat")
+    ticks = simulate(show, clicks150)
+    late = ticks[600:]
+    full = 0.8 * 255 * 0.9  # master 0.8: a real flash reaches ~full master brightness
+    mover_peaks = flash_times(mover(late, 7).astype(float), late, thresh=full)
+    strobe_flashes = flash_times(strobe_series(late), late)
+    ratio = len(mover_peaks) / max(len(strobe_flashes), 1)
+    assert 0.15 < ratio < 0.4  # about every 4th
+
+
+def test_mover_flash_can_be_disabled_and_obeys_the_strobe_key(clicks150):
+    off, _ = new_show(scene="beat", mover_flash_every=0)
+    ticks = simulate(off, clicks150)[600:]
+    assert mover(ticks, 7).max() < 0.8 * 255 * 0.8  # pulses stay below a flash
+    show, _ = new_show(scene="beat")
+    show.command("s")
+    ticks = simulate(show, clicks150)[600:]
+    assert mover(ticks, 7).max() < 0.8 * 255 * 0.8 and strobe_series(ticks).max() == 0
+
+
+def test_drop_flashes_strobe_and_mover_together():
+    pad = 0.15 * sine_pad(8.0)
+    x = np.concatenate([click_track(150, 24.0, SR), pad, click_track(150, 12.0, SR)])
+    show, _ = new_show()
+    ticks = simulate(show, analyse(x))
+    window = [tk for tk in ticks if 32.0 < tk.t < 33.5]
+    assert strobe_series(window).max() > 0.45 * 255  # full-level flash at the drop (first frame
+    #                                                   shows ~0.62 of 0.8 master)
+    assert mover(window, 7).max() > 0.8 * 255 * 0.9

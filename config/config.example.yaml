@@ -35,6 +35,9 @@ show:
   drive_energy: 0.2          # ...with at least this bass energy (distorted kicks live above 150 Hz)
   drive_flash_gate: 0.25     # drive scene: flash on kick events if bass energy is at least this
   drive_min_confidence: 0.15 # ...and some periodicity (rules out pure noise)
+  mover_flash_every: 4       # every 4th flash event the moving head flashes too (0 = never)
+  breath_period_s: 7         # ambient scene: moving head brightness breathes at this period
+  breath_depth: 0.6          # ...dipping to (1 - depth) of its level (0 = no breathing)
 
 # Profiles are looked up in config/fixtures/<profile>.json
 fixtures:

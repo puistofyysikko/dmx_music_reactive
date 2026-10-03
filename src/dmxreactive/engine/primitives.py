@@ -17,20 +17,27 @@ def smooth_toward(current: float, target: float, dt: float, tau: float) -> float
 
 
 class Decay:
-    """A flash envelope: jumps to a level on trigger, then decays exponentially."""
+    """A flash envelope: jumps to a level on trigger, then decays exponentially.
 
-    def __init__(self, tau_s: float) -> None:
+    With `full_first_frame`, the frame that follows a trigger is output at the full triggered
+    level (decay starts on the next frame); by default the decay is applied first, so the
+    first frame shows ~60 % of the level at a 30 Hz render rate.
+    """
+
+    def __init__(self, tau_s: float, full_first_frame: bool = False) -> None:
         self.tau = tau_s
         self.value = 0.0
+        self._full_first = full_first_frame
 
     def trigger(self, level: float = 1.0) -> None:
         self.value = max(self.value, level)
 
     def step(self, dt: float) -> float:
+        shown = self.value
         self.value *= math.exp(-dt / self.tau)
         if self.value < 1e-3:
             self.value = 0.0
-        return self.value
+        return shown if self._full_first else self.value
 
 
 class Slew:
