@@ -17,7 +17,7 @@ audio:
   latency_ms: 10
 
 show:
-  beat_lead_ms: 95        # fire predicted-beat flashes this much early (camera: ~65 ms late at 30)
+  beat_lead_ms: 85        # predicted-beat flashes fire this early (GoPro 240 fps: 95 gave -20 ms, i.e. 20 ms early)
   max_flash_hz: 8         # hard cap on dimmer-pulse flashes per second (<= 10)
   flash_decay_ms: 70
   master: 0.8             # overall brightness ceiling (+/- keys change it live)

@@ -572,6 +572,10 @@ Changes made:
 
 To verify next: re-film `dmxreactive run --flash-path grid --scene beat` with the click track and run `latency_analyze.py clip.mp4 --lead 95` (expect a median near 0 ms), and look at the new mover strobe bursts live.
 
+## 13c-9. Day 3: latency re-test with the new settings (GX014450, GoPro 240 fps)
+
+`run --flash-path grid --scene beat` + 150 BPM click track, `tools/latency_analyze.py ... --lead 95`: 70/70 clicks (after lock) paired with a flash; **flash minus click = median −20 ms** (p10 −33, p90 −10, spread 23 ms ≈ render tick 25 ms + node output 25 ms quantisation). Before the changes the strobe was +98 ms late (kick path), so predicted-beat flashes are now ~20 ms early. `beat_lead_ms` set to **85** (not the tool's suggested 75): light slightly early is better tolerated than light late (audio-visual sync detection thresholds are asymmetric: ≈ 45 ms for sound ahead of picture vs ≈ 125 ms for sound behind it). Kick-triggered flashes (drive scene, off-grid hits) remain ≈ 100 ms late; user is fine with that; a C++ DSP rewrite would save only ≈ 5–10 ms (software is ≈ 35–50 ms of which analysis is ≈ 3 ms per 21 ms block), better levers if ever needed: `audio.block_size` 512, delaying the audio output, predictive drive scene.
+
 ## 13d. Later hardware measurements (camera)
 
 **GoPro Hero 7 (≈ 240 fps)** was used for the first round (see §13c-8; the planned clips below were recorded and analysed) (the Sony a6000 tops out at 1080/60p, confirmed from its specs). Planned clips, in priority order:
