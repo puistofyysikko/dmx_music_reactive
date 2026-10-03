@@ -552,6 +552,14 @@ Findings and changes:
 
 ## 13d. Later hardware measurements (camera)
 
+**GoPro Hero 7 (≈ 240 fps)** is available (the Sony a6000 tops out at 1080/60p, confirmed from its specs). Planned clips, in priority order:
+1. `pulse-test mover1` (dimmer pulses 33–500 ms) and `pulse-test mover1 --mode strobe` — how fast the PicoSpot's dimmer rises/falls and whether its built-in strobe gives crisp bursts; decides how the "mover flash" is implemented.
+2. `pulse-test strobe1 --widths 33,67,133` — the Pot Strobe's dimmer response (our strobe flashes are 70 ms dimmer pulses).
+3. **End-to-end latency** (sets `beat_lead_ms`): `python tools/make_click_track.py support/click150.wav 150 40`; run `dmxreactive run --scene beat`; play the click WAV with `paplay`; film lights + speaker with the GoPro (audio on); `python tools/latency_analyze.py clip.mp4 --lead 30` pairs every click in the audio with the first flash onset and suggests a new `beat_lead_ms` (validated on a synthetic clip with a known 80 ms offset: measured +83 ms). Note the tools decode with ffmpeg only (this machine's ffmpeg has no libx264 encoder; decoding of camera files works).
+Skipped on purpose: Pot Strobe above 10 Hz (the cap stays at 10 Hz).
+
+(Previous notes below.)
+
 - **TODO (optional, precision): high-frame-rate strobe re-measurement.** The user recalls the a6000 can record at much higher frame rates once its settings are found again (to our knowledge the a6000 tops out at 1080/60p, so this is unconfirmed; if it is not possible, a phone's 240 fps slow-motion mode, or a photodiode/LDR into the sound card's line-in analysed as audio, would give kHz-level timing). Goals: (1) measure the Pot Strobe above 10 Hz (10–19 Hz is extrapolated) and the PicoSpot up to 25 Hz before ever raising `safe_max_hz`; (2) measure flash pulse width; (3) measure end-to-end audio→light latency (click track on the laptop → flash). Use `strobe-sweep --max-value` and `tools/strobe_analyze.py` (the analyser's ~10 Hz limit is a 60 fps limit, not an algorithm limit). Millisecond precision is a nice-to-have, not a requirement for the party use.
 - PicoSpot tilt range (200° vs 230°) and gobo list.
 
