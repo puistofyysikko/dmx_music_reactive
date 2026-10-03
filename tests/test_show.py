@@ -260,12 +260,60 @@ def test_mover_flash_can_be_disabled_and_obeys_the_strobe_key(clicks150):
     assert mover(ticks, 7).max() < 0.8 * 255 * 0.8 and strobe_series(ticks).max() == 0
 
 
-def test_drop_flashes_strobe_and_mover_together():
+def drop_scenario_feats():
     pad = 0.15 * sine_pad(8.0)
-    x = np.concatenate([click_track(150, 24.0, SR), pad, click_track(150, 12.0, SR)])
+    return analyse(np.concatenate([click_track(150, 24.0, SR), pad, click_track(150, 12.0, SR)]))
+
+
+def test_drop_blast_lasts_about_a_second_and_a_half_and_is_white():
+    show, patch = new_show(drop_duration_s=1.5)
+    ticks = simulate(show, drop_scenario_feats())
+    mv = mover(ticks, 7).astype(float)
+    # blast start: first tick after the pad where the mover jumps to ~full master brightness
+    assert show._last_drop > 31.0  # detected when the kicks come back after the pad
+    start = round(show._last_drop * 30)
+    # the mover stays bright through the blast (hold, then fade): look 0.5 s after the start
+    assert mv[start + 15] > 0.6 * 255 * 0.8  # still bright at 0.5 s
+    stutter = strobe_series(ticks[start:start + 18])  # strobe stutter in the first 0.6 s
+    assert stutter.max() > 0.4 * 255
+    assert ticks[start].dmx["mover1"][5] == 5  # colour wheel: white
+    # after the blast: ordinary beat pulses again (peak ~0.7 of master, not held at full)
+    assert mv[start + 75:start + 105].min() < 0.5 * 255
+
+
+def test_drop_blast_stutter_respects_the_flash_cap():
+    show, _ = new_show(drop_duration_s=2.0, max_flash_hz=8.0)
+    ticks = simulate(show, drop_scenario_feats())
+    sv = strobe_series(ticks)
+    window = [(tk.t, v) for tk, v in zip(ticks, sv, strict=False) if 31.5 < tk.t < 34.5]
+    rises = [window[i][0] for i in range(1, len(window))
+             if window[i][1] >= 0.45 * 255 > window[i - 1][1]]
+    assert len(rises) >= 3
+    assert np.min(np.diff(rises)) >= 1 / 8 - 1 / 30 - 1e-6
+
+
+def test_drop_is_detected_on_a_real_breakdown_but_not_in_steady_music(clicks150):
     show, _ = new_show()
-    ticks = simulate(show, analyse(x))
-    window = [tk for tk in ticks if 32.0 < tk.t < 33.5]
-    assert strobe_series(window).max() > 0.45 * 255  # full-level flash at the drop (first frame
-    #                                                   shows ~0.62 of 0.8 master)
-    assert mover(window, 7).max() > 0.8 * 255 * 0.9
+    simulate(show, drop_scenario_feats())
+    assert show._last_drop > 0  # fired in the breakdown scenario
+    steady, _ = new_show()
+    simulate(steady, clicks150)
+    assert steady._last_drop < 0  # steady 4/4 music never triggers a blast
+
+
+def test_blast_obeys_strobe_key_for_the_strobe_light_only():
+    show, _ = new_show()
+    show.command("s")
+    ticks = simulate(show, drop_scenario_feats())
+    late = [tk for tk in ticks if 31.5 < tk.t < 35]
+    assert strobe_series(late).max() == 0  # flashing off means off
+    assert mover(late, 7).max() >= 0.8 * 255 * 0.95  # the mover swell still happens
+
+
+def test_hold_decay_envelope_holds_then_decays():
+    from dmxreactive.engine.primitives import HoldDecay
+    env = HoldDecay(0.2, 0.1)
+    env.trigger(1.0)
+    values = [env.step(1 / 30) for _ in range(15)]
+    assert values[0] == 1.0 and all(v == 1.0 for v in values[:6])  # 200 ms hold = 6 frames
+    assert values[7] < 1.0 and values[-1] < values[7]

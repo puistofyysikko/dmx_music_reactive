@@ -254,6 +254,48 @@ def cmd_run(args) -> int:
     return 0
 
 
+def cmd_pulse_test(args) -> int:
+    """Pulse one fixture's dimmer (or its built-in strobe) for several widths, to find out how
+    short a flash the hardware can really show. Film it or watch the wall."""
+    config = load_config(args.config)
+    host, _, port = (args.target or "").partition(":")
+    fixture = config.patch.get(args.fixture)
+    widths = [float(w) / 1000.0 for w in args.widths.split(",")]
+    schedule = []  # (start, end, width)
+    t = args.gap
+    for w in widths:
+        for _ in range(args.repeat):
+            schedule.append((t, t + max(w, 1 / config.rate_hz), w))
+            t += max(w, 1 / config.rate_hz) + args.gap
+    total = t
+    state = {"i": -1}
+    fixture.set("dimmer", args.base)
+
+    def on_tick(elapsed: float) -> None:
+        active = next((i for i, (a, b, _) in enumerate(schedule) if a <= elapsed < b), None)
+        if args.mode == "dimmer":
+            fixture.set("dimmer", args.level if active is not None else args.base)
+        else:
+            fixture.set("dimmer", args.level)
+            if active is not None:
+                fixture.set_hz("strobe", args.hz)
+            else:
+                fixture.set("strobe", 0.0)
+        if active is not None and active != state["i"]:
+            state["i"] = active
+            print(f"[{elapsed:5.1f}s] pulse {schedule[active][2] * 1000:.0f} ms")
+
+    what = ("dimmer pulses" if args.mode == "dimmer"
+            else f"built-in strobe bursts at {args.hz:g} Hz")
+    print(f"Pulse test on {fixture.name}: {what}, widths (ms) "
+          f"{[round(w * 1000) for w in widths]} x{args.repeat}; one frame = "
+          f"{1000 / config.rate_hz:.0f} ms. Ctrl-C = blackout.")
+    run_output(config, on_tick, duration_s=total + 0.2, host=host or None,
+               port=int(port) if port else None)
+    print("Done, blackout sent")
+    return 0
+
+
 def cmd_hold(args) -> int:
     """Hold fixed channel values on one fixture (bring-up/debugging), then blackout."""
     config = load_config(args.config)
@@ -342,6 +384,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--device", help="capture source name (default: config audio.device)")
     p.add_argument("--seconds", type=float, help="stop after this many seconds")
     p.set_defaults(func=cmd_meter)
+
+    p = sub.add_parser("pulse-test", help="pulse a fixture with several widths (hardware response)")
+    p.add_argument("fixture", help="fixture name, e.g. mover1")
+    p.add_argument("--mode", choices=["dimmer", "strobe"], default="dimmer",
+                   help="pulse the dimmer, or burst the fixture's built-in strobe")
+    p.add_argument("--widths", default="33,67,133,200,333,500", help="pulse widths in ms")
+    p.add_argument("--repeat", type=int, default=2)
+    p.add_argument("--level", type=float, default=1.0, help="dimmer level during a pulse (0..1)")
+    p.add_argument("--base", type=float, default=0.0, help="dimmer level between pulses (0..1)")
+    p.add_argument("--gap", type=float, default=1.5, help="seconds between pulses")
+    p.add_argument("--hz", type=float, default=6.0, help="strobe rate for --mode strobe (capped)")
+    p.add_argument("--target")
+    p.set_defaults(func=cmd_pulse_test)
 
     p = sub.add_parser("hold", help="hold channel values on one fixture, e.g. hold mover1 pan=0.2")
     p.add_argument("fixture")

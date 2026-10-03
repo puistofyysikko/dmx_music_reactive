@@ -6,11 +6,21 @@ from __future__ import annotations
 
 import logging
 import math
+from collections import deque
 from dataclasses import dataclass, field
+
+import numpy as np
 
 from dmxreactive.analysis.features import Features
 from dmxreactive.dmx.profiles import Patch
-from dmxreactive.engine.primitives import Decay, FlashLimiter, Slew, clamp01, smooth_toward
+from dmxreactive.engine.primitives import (
+    Decay,
+    FlashLimiter,
+    HoldDecay,
+    Slew,
+    clamp01,
+    smooth_toward,
+)
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +50,10 @@ class ShowConfig:
     drive_flash_gate: float = 0.25  # in the drive scene the kick events are the evidence
     drive_min_confidence: float = 0.15  # ...and some periodicity (rules out pure noise)
     mover_flash_every: int = 4  # every Nth flash event the moving head flashes too (0 = never)
+    mover_flash_hold_ms: float = 200.0  # the moving head's dimmer is slow: hold flashes this long
+    drop_duration_s: float = 1.5  # length of the drop blast (strobe stutter, then a fade)
+    drop_dip: float = 0.25  # a breakdown = bass energy this far below the recent loud reference
+    drop_min_gap_s: float = 10.0  # at most one drop blast per this many seconds
     breath_period_s: float = 7.0  # ambient scene: the moving head's brightness breathes at this
     breath_depth: float = 0.6  # ...dipping to (1 - depth) of its level at the bottom
 
@@ -87,7 +101,7 @@ class BeatScene:
         self._limiter = limiter
         self._flash = Decay(cfg.flash_decay_ms / 1000.0)
         self._accent = Decay(0.25)
-        self._mover_flash = Decay(0.09, full_first_frame=True)
+        self._mover_flash = HoldDecay(cfg.mover_flash_hold_ms / 1000.0, 0.12)
         self._events = 0
         self.strobe_enabled = True
         self.flash_count = 0
@@ -106,12 +120,7 @@ class BeatScene:
         fired_flash = False
         beat_now = bool(c.kicks and c.kick_strength >= 0.4) if self.kick_driven else bool(
             c.beats_fired)
-        if self.strobe_enabled and c.drop and self._limiter.try_fire(c.t):
-            # the drop has priority over an ordinary beat on the same tick: everything flashes
-            self._flash.trigger(1.0)
-            self._mover_flash.trigger(1.0)
-            fired_flash = True
-        elif self.strobe_enabled:
+        if self.strobe_enabled:
             # 1) a predicted grid beat (drive scene: a detected kick) flashes, unless the bass
             #    has dropped out (breakdown)
             gate = cfg.drive_flash_gate if self.kick_driven else cfg.flash_gate
@@ -164,24 +173,18 @@ class AmbientScene:
         self._limiter = limiter  # the shared hard cap
         self._own = FlashLimiter(cfg.ambient_flash_hz)
         self._flash = Decay(cfg.flash_decay_ms / 1000.0)
-        self._mover_flash = Decay(0.09, full_first_frame=True)
         self.strobe_enabled = True
         self.flash_count = 0
 
     def render(self, c: Ctx) -> Intent:
         cfg = self.cfg
-        if self.strobe_enabled and c.drop and self._limiter.try_fire(c.t):
-            self._flash.trigger(1.0)
-            self._mover_flash.trigger(1.0)
-            self.flash_count += 1
-        elif (self.strobe_enabled and c.kicks and c.kick_strength >= cfg.ambient_flash_energy
+        if (self.strobe_enabled and c.kicks and c.kick_strength >= cfg.ambient_flash_energy
                 and c.kick_rise_db >= cfg.ambient_flash_rise_db
                 and c.bass_energy >= cfg.ambient_flash_energy and self._own.try_fire(c.t)
                 and self._limiter.try_fire(c.t)):
             self._flash.trigger(0.7)
             self.flash_count += 1
         flash = self._flash.step(c.dt)
-        mover_flash = self._mover_flash.step(c.dt)
         out: Intent = {f.name: {"dimmer": flash if self.strobe_enabled else 0.0}
                        for f in self.strobes}
         pan_lo, pan_hi = cfg.pan_limits
@@ -197,7 +200,7 @@ class AmbientScene:
             pan = 0.5 + 0.5 * math.sin(2 * math.pi * (c.t / 45.0 + 0.3 * i))
             tilt = 0.5 + 0.5 * math.sin(2 * math.pi * (c.t / 31.0 + 0.5 + 0.2 * i))
             out[f.name] = {
-                "dimmer": max(base * breath(i), mover_flash),
+                "dimmer": base * breath(i),
                 "pan": pan_lo + pan * (pan_hi - pan_lo),
                 "tilt": tilt_lo + tilt * (tilt_hi - tilt_lo),
                 "speed": 0.6,
@@ -232,7 +235,16 @@ class Show:
         self._last_locked = False
         self.override = self.cfg.scene if self.cfg.scene in self._scenes else "auto"
         self._kick_rate = 0.0
-        self._low_run = 0.0
+        self._drop_ef: float | None = None
+        self._drop_ref = 0.0
+        self._drop_hist: deque[float] = deque(maxlen=900)  # ~30 s at 30 Hz
+        self._drop_n = 0
+        self._groove_t = -1e9  # last time the music had a locked beat or was kick-dense
+        self._drop_run = 0.0
+        self._drop_high = 0.0
+        self._last_drop = -1e9
+        self._blast_t0: float | None = None
+        self._force_white = False
         self._bass_avg = 0.0
         self._energetic_run = 0.0
         self._energetic_last = False
@@ -290,6 +302,10 @@ class Show:
         ctx = self._context(f, age_s, dt, silent, stale)
         self._update_mood(ctx, dt)
         intents = self._blend(ctx, dt)
+        if ctx.drop:
+            self._blast_t0, self._force_white = self.t, True
+            log.info("drop -> blast")
+        self._overlay_blast(intents)
         self._update_master(silent, dt)
         self._apply(intents, dt)
 
@@ -323,6 +339,8 @@ class Show:
         energetic = (not silent and f is not None and self._kick_rate >= self.cfg.drive_kick_rate
                      and self._bass_avg >= self.cfg.drive_energy
                      and f.beat_confidence >= self.cfg.drive_min_confidence)
+        if locked or energetic:
+            self._groove_t = self.t
         # Beat position integrates smoothly (it paces the sweeps); a fired grid beat only
         # nudges it toward the nearest whole beat, so grid re-syncs never make the head jump.
         if self._bpm > 0:
@@ -333,16 +351,57 @@ class Show:
                    bass, max(0, kicks), strength, rise, bass, energetic, drop)
 
     def _detect_drop(self, bass: float, dt: float) -> bool:
-        """True once when strong bass returns after at least 1.5 s of (almost) none."""
-        if bass < 0.3:
-            self._low_run += dt
-        elif bass >= 0.6:
-            drop = self._low_run >= 1.5
-            self._low_run = 0.0
-            return drop
+        """True once when the bass comes back after a breakdown.
+
+        Relative to the section's own loudness: the reference is the 85th percentile of the
+        smoothed bass energy over the last 30 s (ignores start-up spikes, and a breakdown of up
+        to ~25 s cannot erase it). A breakdown is the smoothed energy sitting `drop_dip` or more
+        below the reference; the drop is a sustained return to within 0.12 of it.
+        """
+        cfg = self.cfg
+        self._drop_ef = bass if self._drop_ef is None else smooth_toward(
+            self._drop_ef, bass, dt, 0.6)
+        self._drop_hist.append(self._drop_ef)
+        self._drop_n += 1
+        if self._drop_n % 5 == 0 and len(self._drop_hist) >= 150:  # >= 5 s of history
+            self._drop_ref = float(np.percentile(self._drop_hist, 85))
+        if len(self._drop_hist) < 150 or self.t - self._groove_t > 30.0:
+            return False  # no drops in music that has no groove (ballads, pads, speech)
+        gap = self._drop_ref - self._drop_ef
+        if gap >= cfg.drop_dip:
+            self._drop_run += dt
+            self._drop_high = 0.0
+        elif gap <= 0.12:
+            self._drop_high += dt
+            if self._drop_high >= 0.4:
+                drop = (self._drop_run >= 1.0 and self.t - self._last_drop >= cfg.drop_min_gap_s)
+                self._drop_run = 0.0
+                if drop:
+                    self._last_drop = self.t
+                return drop
         else:
-            self._low_run = max(0.0, self._low_run - dt)
+            self._drop_high = 0.0
         return False
+
+    def _blast_levels(self) -> tuple[float, float] | None:
+        """(strobe level, mover level) of the drop blast, or None when it is not running.
+
+        Strobe light: 6 Hz stutter (under the flash cap) for the first 40 % of the blast, then
+        a linear fade. Moving head: full hold for the stutter part, then the same fade (its
+        dimmer is too slow for stutter)."""
+        if self._blast_t0 is None:
+            return None
+        dur = self.cfg.drop_duration_s
+        rel = self.t - self._blast_t0
+        if rel >= dur:
+            self._blast_t0 = None
+            return None
+        stutter = 0.4 * dur
+        fade = 1.0 - (rel - stutter) / (dur - stutter)
+        if rel < stutter:
+            on = (rel * 6.0) % 1.0 < 0.55
+            return (1.0 if on else 0.2), 1.0
+        return fade, fade
 
     def _update_mood(self, c: Ctx, dt: float) -> None:
         if self.override != "auto":
@@ -394,6 +453,18 @@ class Show:
             mixed[name] = ch
         return mixed
 
+    def _overlay_blast(self, intents: Intent) -> None:
+        levels = self._blast_levels()
+        if levels is None:
+            return
+        strobe_level, mover_level = levels
+        for fx in self.patch.fixtures:
+            want = intents.setdefault(fx.name, {})
+            if fx.group == "strobes" and self.strobe_enabled:
+                want["dimmer"] = max(float(want.get("dimmer", 0.0)), strobe_level)
+            elif fx.group == "movers":
+                want["dimmer"] = max(float(want.get("dimmer", 0.0)), mover_level)
+
     def _update_master(self, silent: bool, dt: float) -> None:
         self._silent_for = self._silent_for + dt if silent else 0.0
         target = 0.0 if self._silent_for >= 0.5 else self.master
@@ -419,12 +490,15 @@ class Show:
                 fx.set("tilt", clamp01(st.tilt.step(tilt, dt)))
             if "speed" in want and fx.has("speed"):
                 fx.set("speed", clamp01(float(want["speed"])))
+            if self._force_white and fx.has("color") and fx.group == "movers":
+                st.colour, st.colour_t = "white", self.t  # the blast is white, whatever the hold
             if "color" in want and fx.has("color"):
                 colour = str(want["color"])
                 if colour != st.colour and self.t - st.colour_t >= self.cfg.colour_hold_s:
                     st.colour, st.colour_t = colour, self.t
                 if st.colour:
                     fx.set("color", st.colour)
+        self._force_white = False
 
 
 def _clip(x: float, lo: float, hi: float) -> float:

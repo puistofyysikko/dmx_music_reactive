@@ -68,3 +68,31 @@ class FlashLimiter:
             self._last = t
             return True
         return False
+
+
+class HoldDecay:
+    """A pulse that holds its full level for `hold_s` and then decays exponentially.
+
+    Output is the full level on the first frame after a trigger, so even a short hold is
+    visible at a 30 Hz render rate (the moving head's dimmer is slow: it needs ~100 ms+)."""
+
+    def __init__(self, hold_s: float, tau_s: float) -> None:
+        self.hold, self.tau = hold_s, tau_s
+        self.level = 0.0
+        self._age = 1e9
+
+    def trigger(self, level: float = 1.0) -> None:
+        self.level, self._age = max(self.level if self._age < self.hold else 0.0, level), 0.0
+
+    def step(self, dt: float) -> float:
+        if self.level <= 0.0:
+            return 0.0
+        age = self._age
+        self._age += dt
+        if age < self.hold:
+            return self.level
+        value = self.level * math.exp(-(age - self.hold) / self.tau)
+        if value < 1e-3:
+            self.level = 0.0
+            return 0.0
+        return value

@@ -107,11 +107,17 @@ def load_config(path: str | Path | None = None) -> Config:
         drive_flash_gate=float(sh.get("drive_flash_gate", d.drive_flash_gate)),
         drive_min_confidence=float(sh.get("drive_min_confidence", d.drive_min_confidence)),
         mover_flash_every=int(sh.get("mover_flash_every", d.mover_flash_every)),
+        mover_flash_hold_ms=float(sh.get("mover_flash_hold_ms", d.mover_flash_hold_ms)),
+        drop_duration_s=float(sh.get("drop_duration_s", d.drop_duration_s)),
+        drop_dip=float(sh.get("drop_dip", d.drop_dip)),
+        drop_min_gap_s=float(sh.get("drop_min_gap_s", d.drop_min_gap_s)),
         breath_period_s=float(sh.get("breath_period_s", d.breath_period_s)),
         breath_depth=float(sh.get("breath_depth", d.breath_depth)),
     )
     if not 0.0 < show.max_flash_hz <= 10.0:
         raise ProfileError("show.max_flash_hz must be in (0, 10]")
+    if not 0.2 <= show.drop_duration_s <= 4.0:
+        raise ProfileError("show.drop_duration_s must be between 0.2 and 4 seconds")
     if not 0.0 <= show.breath_depth <= 1.0 or show.breath_period_s < 1.0:
         raise ProfileError("show.breath_depth must be 0..1 and breath_period_s >= 1")
     if show.scene not in ("auto", "beat", "ambient", "drive"):

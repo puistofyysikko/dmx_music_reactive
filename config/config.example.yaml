@@ -36,6 +36,10 @@ show:
   drive_flash_gate: 0.25     # drive scene: flash on kick events if bass energy is at least this
   drive_min_confidence: 0.15 # ...and some periodicity (rules out pure noise)
   mover_flash_every: 4       # every 4th flash event the moving head flashes too (0 = never)
+  mover_flash_hold_ms: 200   # the moving head's dimmer is slow: hold its flashes this long
+  drop_duration_s: 1.5       # drop blast: white, strobe stutter (6 Hz) then fade; 0.5-2 s
+  drop_dip: 0.25             # a breakdown = bass energy this far below the recent loud level
+  drop_min_gap_s: 10         # at most one blast per this many seconds
   breath_period_s: 7         # ambient scene: moving head brightness breathes at this period
   breath_depth: 0.6          # ...dipping to (1 - depth) of its level (0 = no breathing)
 
