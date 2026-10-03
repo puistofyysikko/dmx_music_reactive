@@ -12,7 +12,8 @@ from dmxreactive.dmx.artnet import build_artpollreply, parse_artdmx
 
 class FakeNode:
     def __init__(self, host: str = "127.0.0.1", port: int = 0, history_channels: int = 0,
-                 poll_reply_to: tuple[str, int] | None = None, port_address: int = 0) -> None:
+                 poll_reply_to: tuple[str, int] | None = None, port_address: int = 0,
+                 record_times: bool = True) -> None:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._sock.bind((host, port))
         self._sock.settimeout(0.1)
@@ -28,6 +29,7 @@ class FakeNode:
         self._poll_reply_to = poll_reply_to  # where to send ArtPollReply (None: don't answer)
         self._advertised = port_address  # what an ArtPollReply claims
         self.polls = 0
+        self._record_times = record_times  # False for long soak runs (bounded memory)
         self.history: list[tuple[float, bytes]] = []  # (arrival time, first N channels)
         self._last_seq = 0
         self._stop = threading.Event()
@@ -77,7 +79,8 @@ class FakeNode:
                 self._frame = pkt.data.ljust(512, b"\x00")
                 self._port_address = pkt.port_address
                 self.packets += 1
-                self.arrival_times.append(now)
+                if self._record_times:
+                    self.arrival_times.append(now)
                 if self._history_channels:
                     self.history.append((now, self._frame[: self._history_channels]))
 

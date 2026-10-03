@@ -4,17 +4,23 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
 _SPIN_S = 0.0015  # sleep until this close to the deadline, then busy-wait for precision
 
 
+ERROR_WINDOW = 4000  # keep the last N tick errors (~100 s at 40 Hz): bounded memory for days
+
+
 @dataclass
 class LoopStats:
     ticks: int = 0
     late_ticks: int = 0  # ticks that started more than one full period late
-    errors: list[float] = field(default_factory=list)  # start time minus deadline, seconds
+    # start time minus deadline, seconds, of the most recent ticks only
+    errors: deque[float] = field(default_factory=lambda: deque(maxlen=ERROR_WINDOW))
+    max_error_s: float = 0.0  # worst tick since the start
 
     def summary(self) -> dict[str, float]:
         if not self.errors:
@@ -24,7 +30,7 @@ class LoopStats:
             "ticks": self.ticks,
             "mean_ms": sum(e) / len(e),
             "p95_ms": e[int(0.95 * (len(e) - 1))],
-            "max_ms": e[-1],
+            "max_ms": max(e[-1], self.max_error_s * 1000),
         }
 
 
@@ -51,6 +57,7 @@ class FrameLoop:
                 pass
             t = time.perf_counter()
             self.stats.errors.append(t - deadline)
+            self.stats.max_error_s = max(self.stats.max_error_s, abs(t - deadline))
             self._tick(t - start)
             self.stats.ticks += 1
             deadline += self.period

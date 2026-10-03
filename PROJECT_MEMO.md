@@ -589,6 +589,12 @@ Done:
 
 Still open: soak run (30 min – 3 h), USB DAC/mixer as default output and unplug/replug (needs the wires, tomorrow), Bluetooth `light_delay_ms` measurement, whether the launcher feels right.
 
+## 13c-11. Day 3: soak test
+
+`tools/soak.py` (hardware-free, silent): a looping playlist of `support/tracks/` plays into a virtual null sink (`dmxsoak`), the real capture path (parec on its monitor) feeds the analysis, the full show runs at the configured rate and sends Art-Net to a fake node on loopback; a metrics line is logged every minute (RSS, CPU, packets/s, sequence gaps, late ticks, p95/max loop error, audio drops/restarts, analysis/send errors, flashes/drops, threads, open fds) and PASS/FAIL criteria are applied at the end (memory growth ≤ 15 MB after 5 min warm-up, constant threads/fds, no sequence gaps/bad packets/errors, late ticks ≤ 0.1 %, no capture restarts, dropped audio blocks ≤ 0.1 %, packet rate ≥ 97 % of nominal). The sink is removed on exit.
+Found while preparing it: `LoopStats.errors` grew without bound (~15 MB per 3 h) → now a bounded deque (+ running maximum); `FakeNode(record_times=False)` for long runs. 2.5-minute dry run: PASS (41.5 → 41.8 MB RSS, 40.0 pkt/s, 0 gaps, 0 late ticks, 30–36 % of one core).
+**3 h run started 2026-10-03 18:54 (detached, with a sleep inhibitor), log `support/soak_20261003_1854.log`, expected end ≈ 21:54.** Heavy work on the laptop (e.g. the full test suite) would distort its timing numbers.
+
 ## 13d. Later hardware measurements (camera)
 
 **GoPro Hero 7 (≈ 240 fps)** was used for the first round (see §13c-8; the planned clips below were recorded and analysed) (the Sony a6000 tops out at 1080/60p, confirmed from its specs). Planned clips, in priority order:
