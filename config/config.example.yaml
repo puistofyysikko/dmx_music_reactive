@@ -17,7 +17,7 @@ audio:
   latency_ms: 10
 
 show:
-  beat_lead_ms: 0         # predicted beats: GoPro-calibrated for the wired chain (see memo 13c-13)
+  beat_lead_ms: -30       # negative = delay: GoPro-calibrated (wired: predicted beats were -40 ms with 0, kicks +17 ms)
   max_flash_hz: 8         # hard cap on dimmer-pulse flashes per second (<= 10)
   flash_decay_ms: 70
   master: 0.8             # overall brightness ceiling (+/- keys change it live)

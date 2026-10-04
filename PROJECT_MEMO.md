@@ -634,6 +634,11 @@ Screen flash (fades up over ~20 ms, 120 ms on) vs click: **flash 101 ms before t
 - New settings: **wired: `beat_lead_ms` 0, `light_delay_ms` 60** (expected: kick flashes ≈ 0 ms, predicted-beat flashes ≈ −25 ms, i.e. slightly early); **Bluetooth (`config/config_bt.yaml`): `light_delay_ms` 315** (60 + 254), lead 0. `light_delay_ms` delays all paths (also kick-triggered ones). Tool note: `latency_analyze.py`'s 'suggested beat_lead_ms' is only meaningful for the grid path and must be read modulo the click period; use two tempi (150 and 120 BPM) to dealias.
 - To verify (pending, two wired clips at 120 BPM with the new config): `run --flash-path grid --scene beat` (expect ≈ −25 ms) and `run --flash-path kick --scene beat` (expect ≈ 0 ms), analysed with `--lead 0 --min-lag -0.3 --max-lag 0.45`.
 
+### Verification clips (GX014456 grid path, GX014457 kick path; wired, 120 BPM clicks, `light_delay_ms` 60, `beat_lead_ms` 0)
+- Predicted-beat flashes: **−40 ms** (p10 −54, p90 −23; 56/56 clicks); expected −25 → ok.
+- Kick-triggered flashes: **+17 ms** (p10 +5, p90 +36; 48/60 clicks); expected 0 → ok.
+Both within ~20 ms of the model. Trim: `beat_lead_ms` **−30** (delays only the predicted-beat flashes → ≈ −10 ms; kicks stay at +17 ms) in all three configs (wired, Bluetooth, example); `light_delay_ms` stays 60 (wired) / 315 (Bluetooth). `latency_analyze.py` now warns when a reading is larger than a quarter of the click period (alias risk).
+
 ## 13d. Later hardware measurements (camera)
 
 **GoPro Hero 7 (≈ 240 fps)** was used for the first round (see §13c-8; the planned clips below were recorded and analysed) (the Sony a6000 tops out at 1080/60p, confirmed from its specs). Planned clips, in priority order:
