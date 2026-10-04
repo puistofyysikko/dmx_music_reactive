@@ -99,6 +99,15 @@ def render(state: LiveState):
         bands = " ".join(f"{n} {spark(v)}" for n, v in zip(BAND_NAMES, f.bands, strict=False))
         audio.add_row(Text(bands), Text(f"bass energy {bar(f.bass_energy, 8)}"),
                       Text("silent" if f.silent else ""), Text(""))
+        barline = Text("bar ")
+        trusted = f.bar_beat >= 0 and f.bar_confidence >= cfg.show.bar_min_confidence
+        for n in range(4):
+            on = trusted and f.bar_beat == n
+            barline.append(f" {n + 1} ", style="bold black on green" if on and n == 0 else
+                           "bold green" if on else "grey42")
+        barline.append(f"  ({f.bar_confidence:.0%})" if f.bar_beat >= 0 else "  (?)",
+                       style="grey50")
+        audio.add_row(barline, Text(""), Text(""), Text(""))
     else:
         audio.add_row(Text("no audio from the capture (is anything playing? right device?)",
                            style="bold red"))

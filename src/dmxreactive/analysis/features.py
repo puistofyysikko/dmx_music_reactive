@@ -32,6 +32,11 @@ class Features:
     beat: bool
     beat_count: int
     beat_confidence: float  # 0..1 (strength of the periodicity; see beat_locked for trust)
+    beat_index: int  # running beat number within the current grid (see grid_epoch)
+    grid_epoch: int  # changes whenever the beat grid is re-locked/reset
+    bar_beat: int  # position in the 4-beat bar: 0 = the one, 1..3; -1 unknown
+    bar_confidence: float  # 0..1
+    bar_start: bool  # True on the frame a 'one' begins
     beat_locked: bool  # True when kicks consistently fall on the predicted beat grid
     energy_trend: float  # -1 falling (breakdown) .. +1 rising (build-up)
 

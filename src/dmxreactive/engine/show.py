@@ -50,6 +50,7 @@ class ShowConfig:
     #                           keep much of their punch above the 20-150 Hz band)
     drive_flash_gate: float = 0.25  # in the drive scene the kick events are the evidence
     drive_min_confidence: float = 0.15  # ...and some periodicity (rules out pure noise)
+    bar_min_confidence: float = 0.35  # trust the detected bar position only above this
     mover_flash_every: int = 4  # every Nth flash event the moving head flashes too (0 = never)
     mover_flash_mode: str = "strobe"  # "strobe": burst the head's built-in strobe (crisp);
     #                                   "dimmer": pulse its slow dimmer (slew ~170 ms full scale)
@@ -86,6 +87,9 @@ class Ctx:
     bass_energy: float  # peak-held bass energy vs the track's loud reference, 0..1
     energetic: bool  # kick-dense and bass-heavy (frenchcore, hardcore, drops)
     drop: bool  # bass returned strongly after >= 1.5 s of little bass (a drop), once
+    bar_beat: int = -1  # position in the bar of the beat that just fired (0 = the one), -1 unknown
+    bar_known: bool = False  # the bar position is confident enough to act on
+    bar_no: int = 0  # bars seen since the bar position became known
 
 
 Intent = dict[str, dict[str, float | str]]  # fixture name -> channel -> value
@@ -111,6 +115,8 @@ class BeatScene:
         self._accent = Decay(0.25)
         self._mover_flash = HoldDecay(cfg.mover_flash_hold_ms / 1000.0, 0.12)
         self._burst_until = -1.0
+        self._bar_known = False
+        self._bar_one = False
         self._now = 0.0
         self._events = 0
         self.strobe_enabled = True
@@ -120,7 +126,9 @@ class BeatScene:
         """Every Nth flash event the moving head flashes along."""
         self._events += 1
         every = self.cfg.mover_flash_every
-        if every and self._events % every == 0:
+        # with a trusted bar position the moving head flashes on the ONE; otherwise every Nth
+        on_one = self._bar_one if self._bar_known else (every and self._events % every == 0)
+        if every and on_one:
             if self.cfg.mover_flash_mode == "strobe":
                 self._burst_until = self._now + self.cfg.mover_flash_ms / 1000.0
             else:
@@ -130,6 +138,8 @@ class BeatScene:
         out: Intent = {}
         cfg = self.cfg
         self._now = c.t
+        self._bar_known = c.bar_known and not self.kick_driven
+        self._bar_one = c.bar_beat == 0
         energy = c.bass_energy
         fired_flash = False
         beat_now = bool(c.kicks and c.kick_strength >= 0.4) if self.kick_driven else bool(
@@ -139,7 +149,10 @@ class BeatScene:
             #    has dropped out (breakdown)
             gate = cfg.drive_flash_gate if self.kick_driven else cfg.flash_gate
             if beat_now and energy >= gate and self._limiter.try_fire(c.t):
-                self._flash.trigger(0.6 + 0.4 * clamp01((energy - gate) / 0.5))
+                level = 0.6 + 0.4 * clamp01((energy - gate) / 0.5)
+                if self._bar_known and not self.kick_driven:
+                    level *= 1.0 if self._bar_one else 0.8  # the ONE hits hardest
+                self._flash.trigger(level)
                 fired_flash = True
                 self._count_event()
             # 2) a strong bass hit between grid beats (syncopation) flashes too
@@ -161,7 +174,7 @@ class BeatScene:
         for f in self.strobes:
             out[f.name] = {"dimmer": flash if self.strobe_enabled else 0.0}
         pos = c.t * 2.0 if self.kick_driven else c.beat_pos  # drive: pseudo-beats at 120/min
-        bar = int(pos // 8)
+        bar = (c.bar_no // 2) if self._bar_known else int(pos // 8)
         pan_lo, pan_hi = cfg.pan_limits
         tilt_lo, tilt_hi = cfg.tilt_limits
         for i, f in enumerate(self.movers):
@@ -263,6 +276,8 @@ class Show:
         self._last_drop = -1e9
         self._blast_t0: float | None = None
         self._force_white = False
+        self._bar_known_until = -1.0  # the bar position was trusted at the last fired beat
+        self._bar_no = 0
         self._blast_style = "flash"  # "flash" (white blast) or "blackout" (dark, then a pop)
         self._last_blackout_t = -1e9
         self._was_dark = False
@@ -364,6 +379,7 @@ class Show:
     def _context(self, f: Features | None, age_s: float, dt: float, silent: bool,
                  stale: bool) -> Ctx:
         phase, fired, kicks, locked, strength, bass, rise = 0.0, 0, 0, False, 0.0, 0.0, 0.0
+        fired_bar = -1
         drop = False
         if f is not None and not stale:
             locked = f.beat_locked and f.bpm > 0
@@ -377,6 +393,12 @@ class Show:
                     if self.t - self._last_beat_fire >= 0.6 * period:
                         fired = 1
                         self._last_beat_fire = self.t
+                        if f.bar_beat >= 0 and f.bar_confidence >= self.cfg.bar_min_confidence:
+                            ahead = math.floor(f.beat_phase + age_s * f.bpm / 60.0 + lead)
+                            fired_bar = (f.bar_beat + max(ahead, 0)) % 4
+                            self._bar_known_until = self.t + 2.0
+                            if fired_bar == 0:
+                                self._bar_no += 1
                 self._prev_adj = adj
             kicks = f.kick_count - self._last_kick_count
             self._last_kick_count = f.kick_count
@@ -400,7 +422,8 @@ class Show:
             if fired:
                 self._beat_pos += 0.25 * (round(self._beat_pos) - self._beat_pos)
         return Ctx(self.t, dt, f, silent, locked, phase, fired, self._beat_pos, self._level,
-                   bass, max(0, kicks), strength, rise, bass, energetic, drop)
+                   bass, max(0, kicks), strength, rise, bass, energetic, drop,
+                   fired_bar if fired else -1, self.t < self._bar_known_until, self._bar_no)
 
     def _detect_drop(self, bass: float, dt: float) -> bool:
         """True once when the bass comes back after a breakdown.

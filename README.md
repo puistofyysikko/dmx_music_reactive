@@ -30,7 +30,9 @@ scripts/install_desktop_entry.sh                    # optional KDE launcher "DMX
 .venv/bin/dmxreactive analyze                       # live view: bands, BPM, beat/kick markers
 .venv/bin/dmxreactive analyze --file song.mp3       # same on a file, played in real time
 .venv/bin/python tools/analyze_track.py song.mp3 --plot out.png --reference   # offline report (needs librosa, matplotlib)
-.venv/bin/pytest                                    # tests (~45 s)
+.venv/bin/python tools/bar_check.py song.mp3 out.wav  # ear test: beeps on the detected downbeats
+.venv/bin/dmxreactive gobo-walk mover1              # step the PicoSpot's gobo wheel (note which DMX values show which pattern)
+.venv/bin/pytest                                    # tests (~5 min)
 .venv/bin/ruff check .                              # lint
 .venv/bin/python tools/jitter_check.py 60           # send-timing check
 ```

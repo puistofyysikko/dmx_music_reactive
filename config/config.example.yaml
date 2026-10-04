@@ -36,6 +36,7 @@ show:
   drive_energy: 0.2          # ...with at least this bass energy (distorted kicks live above 150 Hz)
   drive_flash_gate: 0.25     # drive scene: flash on kick events if bass energy is at least this
   drive_min_confidence: 0.15 # ...and some periodicity (rules out pure noise)
+  bar_min_confidence: 0.35   # act on the detected bar (downbeat) only when it is this clear
   mover_flash_every: 4       # every 4th flash event the moving head flashes too (0 = never)
   mover_flash_mode: strobe   # strobe = burst the head's own strobe (crisp, camera-verified); dimmer = slow
   mover_flash_ms: 250        # strobe-mode burst length (~2 flashes at 8 Hz)

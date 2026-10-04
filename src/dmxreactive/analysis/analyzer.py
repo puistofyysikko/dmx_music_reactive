@@ -6,6 +6,7 @@ from collections import deque
 
 import numpy as np
 
+from dmxreactive.analysis.bar import BarTracker
 from dmxreactive.analysis.dsp import AdaptiveNorm, OnsetDetector, PeakNorm
 from dmxreactive.analysis.features import BAND_NAMES, Features
 from dmxreactive.analysis.tempo import BeatState, TempoTracker
@@ -41,6 +42,12 @@ class Analyzer:
         self._kick = OnsetDetector(self.fr, min_level=0.3)
         self._hat = OnsetDetector(self.fr, min_level=0.3, refractory_s=0.08)
         self._tempo = TempoTracker(self.fr)
+        self._bar = BarTracker()
+        edges = np.geomspace(40.0, 12000.0, 17)  # 16 log-spaced bands
+        bins = np.searchsorted(freqs, edges)
+        self._spec_slices = [(int(a), max(int(b), int(a) + 1))
+                             for a, b in zip(bins[:-1], bins[1:], strict=False)]
+        self.last_spec = np.zeros(16)
         self._env_hist = np.zeros(max(4, round(0.4 * self.fr)))
         self._t = 0.0
         self._kick_count = self._hat_count = self._beat_count = 0
@@ -89,7 +96,7 @@ class Analyzer:
         env = max(0.0, raw - float(self._env_hist.mean()))
         if silent:
             self._tempo.reset()
-            beat_state = BeatState(0.0, 0.0, False, 0.0)
+            beat_state = BeatState(0.0, 0.0, False, 0.0, 0, self._tempo._epoch)
         else:
             beat_state = self._tempo.update(0.0 if silent_now else env)
 
@@ -119,6 +126,12 @@ class Analyzer:
         self._hat_count += hat
         self._beat_count += beat_state.beat
 
+        # coarse 16-band log spectrum (timbre) for the bar tracker's change detection
+        spec = np.array([float(logmag[a:b].mean()) for a, b in self._spec_slices])
+        self.last_spec = spec
+        bar = self._bar.update(beat_state.index, beat_state.epoch,
+                               beat_state.bpm > 0 and not silent, raw, self._bass_hold,
+                               spec, self._last_kick_strength if kick else 0.0)
         level = self._level_norm(level_db)
         self._level_fast += (level - self._level_fast) * (1 - np.exp(-1 / (2.0 * self.fr)))
         self._level_slow += (level - self._level_slow) * (1 - np.exp(-1 / (10.0 * self.fr)))
@@ -148,6 +161,11 @@ class Analyzer:
             beat=beat_state.beat,
             beat_count=self._beat_count,
             beat_confidence=beat_state.confidence,
+            beat_index=beat_state.index,
+            grid_epoch=beat_state.epoch,
+            bar_beat=bar.bar_beat,
+            bar_confidence=bar.bar_confidence,
+            bar_start=bar.bar_start,
             beat_locked=self._locked,
             energy_trend=float(np.clip((self._level_fast - self._level_slow) * 4.0, -1.0, 1.0)),
         )

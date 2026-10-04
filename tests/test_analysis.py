@@ -160,3 +160,53 @@ def test_beat_lock_clears_in_silence():
     feats = run(np.concatenate([click_track(140, 20.0, SR), np.zeros(SR * 4, dtype=np.float32)]))
     assert feats[int(19 * SR / BLOCK)].beat_locked
     assert not feats[-1].beat_locked
+
+
+def bar_track(bpm=150.0, seconds=60.0, sr=SR):
+    """Kick on every beat; every 4th beat (the bar's ONE) carries a low bass note and a crash,
+    and every 8th bar the 'chord' (a sustained tone) changes. Returns (audio, one_times)."""
+    rng = np.random.default_rng(7)
+    x = click_track(bpm, seconds, sr).astype(np.float32)
+    period = 60.0 / bpm
+    ones = np.arange(0.0, seconds - 1.0, 4 * period)
+    t_bass = np.arange(int(0.35 * sr)) / sr
+    bass = (0.5 * np.sin(2 * np.pi * 55 * t_bass) * np.exp(-t_bass / 0.15)).astype(np.float32)
+    t_crash = np.arange(int(0.30 * sr)) / sr
+    crash = (0.12 * rng.standard_normal(len(t_crash)) * np.exp(-t_crash / 0.1)).astype(np.float32)
+    for i, t in enumerate(ones):
+        a = int(t * sr)
+        x[a:a + len(bass)] += bass[: len(x) - a]
+        x[a:a + len(crash)] += crash[: len(x) - a]
+        # a "chord" that changes every 8 bars (sections change on a bar boundary)
+        if i % 8 == 0:
+            f = 220 * (1.5 if (i // 8) % 2 else 1.0)
+            n = min(int(8 * 4 * period * sr), len(x) - a)
+            tt = np.arange(n) / sr
+            x[a:a + n] += (0.08 * np.sin(2 * np.pi * f * tt)).astype(np.float32)
+    return x, ones
+
+
+def test_bar_tracker_finds_the_one_in_a_synthetic_4_4_track():
+    x, ones = bar_track(150.0, 70.0)
+    feats = run(x)
+    starts = np.array([f.t for f in feats if f.bar_start and f.t > 25])
+    assert len(starts) >= 8
+    # every detected 'one' must land on a real accented beat (within 70 ms; frames are 21 ms)
+    err = np.array([np.min(np.abs(ones - t)) for t in starts])
+    assert np.mean(err < 0.07) >= 0.9
+    assert feats[-1].bar_confidence > 0.3
+    # and the other three beats are numbered 1..3 in order
+    seq = [f.bar_beat for f in feats if f.beat and f.t > 25 and f.bar_beat >= 0]
+    assert all((b - a) % 4 == 1 for a, b in zip(seq, seq[1:], strict=False))
+
+
+def test_bar_position_is_unknown_for_silence_and_resets_with_the_grid():
+    feats = run(np.zeros(SR * 4, dtype=np.float32))
+    assert all(f.bar_beat == -1 and not f.bar_start for f in feats)
+
+
+def test_beat_index_never_slips_when_the_grid_is_corrected():
+    feats = [f for f in run(click_track(140, 30.0, SR)) if f.t > 12]
+    idx = [f.beat_index for f in feats if f.beat]
+    assert all(b - a == 1 for a, b in zip(idx, idx[1:], strict=False))  # every beat counted once
+    assert len({f.grid_epoch for f in feats}) <= 2

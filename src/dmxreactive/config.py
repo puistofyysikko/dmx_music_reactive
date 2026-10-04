@@ -107,6 +107,7 @@ def load_config(path: str | Path | None = None) -> Config:
         drive_energy=float(sh.get("drive_energy", d.drive_energy)),
         drive_flash_gate=float(sh.get("drive_flash_gate", d.drive_flash_gate)),
         drive_min_confidence=float(sh.get("drive_min_confidence", d.drive_min_confidence)),
+        bar_min_confidence=float(sh.get("bar_min_confidence", d.bar_min_confidence)),
         mover_flash_every=int(sh.get("mover_flash_every", d.mover_flash_every)),
         mover_flash_mode=str(sh.get("mover_flash_mode", d.mover_flash_mode)),
         mover_flash_ms=float(sh.get("mover_flash_ms", d.mover_flash_ms)),

@@ -27,6 +27,8 @@ class BeatState:
     phase: float  # 0..1, 0 = on the beat
     beat: bool
     confidence: float
+    index: int = 0  # running beat number (never slips when the grid is corrected)
+    epoch: int = 0  # increases whenever the grid is (re)locked or reset: indices restart
 
 
 class TempoTracker:
@@ -40,7 +42,9 @@ class TempoTracker:
         octaves = np.log2(self._bpms / PRIOR_CENTRE_BPM)
         self._prior = np.exp(-0.5 * (octaves / PRIOR_SIGMA_OCT) ** 2)
         self._bpm = 0.0
-        self._phase = 0.0
+        self._pos = 0.0  # continuous beat position: floor = beat index, fraction = phase
+        self._hw = 0  # highest beat index already reported
+        self._epoch = 0
         self._confidence = 0.0
         self._challenger = 0.0
         self._challenger_hits = 0
@@ -53,7 +57,9 @@ class TempoTracker:
         """Forget everything (silence / new track)."""
         self._env[:] = 0
         self._bpm = 0.0
-        self._phase = 0.0
+        self._pos = 0.0
+        self._hw = 0
+        self._epoch += 1
         self._confidence = 0.0
         self._challenger, self._challenger_hits = 0.0, 0
         self._have_lock = False
@@ -91,16 +97,17 @@ class TempoTracker:
         if self._frames % self._update_every == 0 and self._frames >= self._n // 2:
             self._estimate()
         if self._bpm > 0:
-            prev = self._phase
-            self._phase += self._bpm / 60.0 / self.fr
+            self._pos += self._bpm / 60.0 / self.fr
             self._since_beat += 1
-            if self._phase >= 1.0:
-                self._phase -= 1.0
+            idx = math.floor(self._pos)
+            if idx > self._hw:  # high-water mark: a backward correction never repeats a beat
+                self._hw = idx
                 period = 60.0 * self.fr / self._bpm
-                if self._since_beat >= 0.6 * period and prev > 0.5:
+                if self._since_beat >= 0.4 * period:
                     beat = True
                     self._since_beat = 0
-        return BeatState(self._bpm, self._phase, beat, self._confidence)
+        return BeatState(self._bpm, self._pos - math.floor(self._pos), beat, self._confidence,
+                         self._hw, self._epoch)
 
     def _estimate(self) -> None:
         scores, phases = self._score()
@@ -156,11 +163,12 @@ class TempoTracker:
         # also "fraction since last beat", so they compare directly.
         if not self._have_lock or conf < 0.05:
             if conf >= 0.05 or not self._have_lock:
-                self._phase = est
+                self._pos = self._hw + est  # same index, new phase: no instant duplicate beat
+                self._epoch += 1
                 self._have_lock = conf >= 0.05
         else:
-            err = (est - self._phase + 0.5) % 1.0 - 0.5
-            self._phase = (self._phase + 0.2 * err) % 1.0
+            err = (est - (self._pos - math.floor(self._pos)) + 0.5) % 1.0 - 0.5
+            self._pos += 0.2 * err
 
 
 def bpm_to_period_frames(bpm: float, frame_rate: float) -> float:

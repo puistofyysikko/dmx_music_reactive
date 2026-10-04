@@ -394,3 +394,36 @@ def test_no_dark_drop_when_flashing_is_off_or_the_feature_is_disabled():
             show.command(key)
         simulate(show, drop_scenario_feats())
         assert show.drops >= 1 and show.dark_drops == 0
+
+
+def test_the_one_gets_the_hardest_flash_and_the_mover_flash(clicks150):
+    from test_analysis import bar_track  # synthetic 4/4: bass note + crash on every bar's ONE
+
+    x, ones = bar_track(150.0, 70.0)
+    feats = analyse(x)
+    show, _ = new_show(scene="beat", kick_flash_strength=2.0, flash_gate=0.0, beat_lead_ms=0.0)
+    ticks = simulate(show, feats)
+    late = [tk for tk in ticks if tk.t > 28]
+    # mover flashes (strobe-channel bursts) start near the bar's ONE, not on arbitrary beats
+    burst = mover(late, 8)
+    starts = [late[i].t for i in range(1, len(late)) if burst[i] > 0 >= burst[i - 1]]
+    assert len(starts) >= 6
+    err = np.array([np.min(np.abs(ones - t)) for t in starts])
+    assert np.mean(err < 0.12) >= 0.8
+    # the strobe light flashes harder on the ones than on the other beats
+    series = strobe_series(late)
+    peaks = [(late[i].t, series[i]) for i in range(1, len(late) - 1)
+             if series[i] >= series[i - 1] and series[i] > series[i + 1] and series[i] > 40]
+    on_one = [v for t, v in peaks if np.min(np.abs(ones - t)) < 0.12]
+    off_one = [v for t, v in peaks if np.min(np.abs(ones - t)) >= 0.12]
+    assert len(on_one) >= 5 and len(off_one) >= 10
+    assert np.median(on_one) > 1.15 * np.median(off_one)
+
+
+def test_without_a_trusted_bar_the_old_every_nth_behaviour_remains(clicks150):
+    show, _ = new_show(scene="beat", bar_min_confidence=2.0)  # never trusted
+    ticks = simulate(show, clicks150)[600:]
+    burst = mover(ticks, 8)
+    starts = [i for i in range(1, len(burst)) if burst[i] > 0 >= burst[i - 1]]
+    strobe_flashes = flash_times(strobe_series(ticks), ticks)
+    assert 0.15 < len(starts) / max(len(strobe_flashes), 1) < 0.4

@@ -193,6 +193,7 @@ def cmd_analyze(args) -> int:
                 bands = "".join(_spark(v) for v in f.bands)
                 line = (f"level {_spark(f.level)}{_spark(f.level)} bands {bands}  "
                         f"BPM {f.bpm:5.1f} conf {f.beat_confidence:3.0%} "
+                        f"bar {f.bar_beat + 1 if f.bar_beat >= 0 and f.bar_confidence >= 0.35 else '?'} "
                         f"{'LOCKED' if f.beat_locked else 'free  '}  "
                         f"{'BEAT' if f.t - beat_t < 0.1 else '    '} "
                         f"{'KICK' if f.t - kick_t < 0.1 else '    '} "
