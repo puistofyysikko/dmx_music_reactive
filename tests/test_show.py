@@ -347,3 +347,16 @@ def test_mover_strobe_bursts_off_with_the_key_the_setting_and_blackout(clicks150
     dark.command("b")
     ticks = simulate(dark, clicks150)[600:]
     assert mover(ticks, 8).max() == 0 and mover(ticks, 7).max() == 0
+
+
+def test_negative_lead_delays_the_predicted_beat_flashes(clicks150):
+    def flashes_for(lead):
+        show, _ = new_show(scene="beat", beat_lead_ms=lead, kick_flash_strength=2.0, flash_gate=0.0)
+        ticks = simulate(show, clicks150)
+        late = [tk for tk in ticks if tk.t > 20]
+        return flash_times(strobe_series(late), late)
+
+    base, delayed = flashes_for(0.0), flashes_for(-30.0)
+    n = min(len(base), len(delayed))
+    shift = np.median((delayed[:n] - base[:n]) % 0.4) * 1000
+    assert 15 <= shift <= 50  # about +30 ms (one render frame of 33 ms quantisation)

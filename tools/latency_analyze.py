@@ -88,9 +88,10 @@ def main() -> int:
     print("  (+ = light late, - = light early; the light is meant to be ~0)")
     period_ms = float(np.median(np.diff(clicks))) * 1000 if len(clicks) > 2 else 0.0
     if period_ms and abs(med) > 0.25 * period_ms:
-        print(f"  WARNING: readings repeat every click period ({period_ms:.0f} ms), so {med:+.0f} ms "
-              f"could also be {med - period_ms * np.sign(med):+.0f} ms. Confirm with a second "
-              f"click tempo (e.g. 120 vs 150 BPM) before changing any setting.")
+        alias = med - period_ms * np.sign(med)
+        print(f"  WARNING: readings repeat every click period ({period_ms:.0f} ms), so "
+              f"{med:+.0f} ms could also be {alias:+.0f} ms. Confirm with a second click tempo "
+              f"(e.g. 120 vs 150 BPM) before changing any setting.")
     suggested = args.lead + med
     print(f"  suggested beat_lead_ms: {suggested:.0f}  (was {args.lead:g}; frame-quantised "
           f"clips are good to about +-{1000 / fps:.0f} ms, plus speaker/room sound delay of "
