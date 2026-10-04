@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 import time
 
@@ -461,6 +462,8 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_hold)
 
     args = parser.parse_args(argv)
+    if not args.config:  # e.g. DMXREACTIVE_CONFIG=config/config_bt.yaml scripts/start_show.sh
+        args.config = os.environ.get("DMXREACTIVE_CONFIG") or None
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     try:

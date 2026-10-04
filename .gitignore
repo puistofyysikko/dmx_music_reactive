@@ -10,3 +10,4 @@ support/*.mp4
 support/*.MOV
 support/tracks/
 support/*.wav
+config/config_*.yaml
