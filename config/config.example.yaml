@@ -17,7 +17,7 @@ audio:
   latency_ms: 10
 
 show:
-  beat_lead_ms: 85        # predicted-beat flashes fire this early (GoPro 240 fps: 95 gave -20 ms, i.e. 20 ms early)
+  beat_lead_ms: 0         # predicted beats: GoPro-calibrated for the wired chain (see memo 13c-13)
   max_flash_hz: 8         # hard cap on dimmer-pulse flashes per second (<= 10)
   flash_decay_ms: 70
   master: 0.8             # overall brightness ceiling (+/- keys change it live)
@@ -26,7 +26,7 @@ show:
   scene: auto             # auto | beat | ambient | drive
   colour_hold_s: 1.5      # min time between colour-wheel changes (mechanical)
   silence_fade_s: 2.0
-  light_delay_ms: 0          # delay the lights: 0 for wired/laptop speakers; ~150-250 for a Bluetooth speaker
+  light_delay_ms: 60         # wired chain: lights are otherwise ~60 ms ahead of the sound on kick flashes
   flash_gate: 0.35        # no beat flash below this bass energy (breakdowns stay dark); 0 = always
   kick_flash_strength: 0.6   # strong bass hits between grid beats also flash; >1 disables this
   ambient_flash_energy: 0.75 # in the ambient scene only very strong bass hits flash (drops)

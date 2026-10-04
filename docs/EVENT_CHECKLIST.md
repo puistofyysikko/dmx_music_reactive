@@ -13,8 +13,8 @@ Print this or keep it open on the phone. Estimated time: 15 minutes before guest
 4. **Laptop:** plugged into mains; power profile "performance"; screen lock / sleep / notifications
    off (KDE: Do Not Disturb); close browsers' extra tabs.
 5. **Audio:** laptop output → speakers/mixer. **Wired or USB audio is best.** A Bluetooth speaker
-   delays the sound by ~150–250 ms; set `show.light_delay_ms` to that (measure with
-   `tools/latency_analyze.py`), and set it back to 0 for wired output.
+   delays the sound by ~250 ms: start with `DMXREACTIVE_CONFIG=config/config_bt.yaml scripts/start_show.sh`
+   (light delay 315 ms instead of the wired value 60 ms).
 
 ## Checks (5 min)
 6. `scripts/start_show.sh` (or the "DMX Music Reactive" launcher) runs the **pre-flight**:

@@ -625,6 +625,15 @@ Results today:
 ### Camera A/V calibration result (GX014454, screen flash + click, laptop speakers)
 Screen flash (fades up over ~20 ms, 120 ms on) vs click: **flash 101 ms before the click** (median −101, p10 −108, p90 −80, 14 pairs; onset = 30 % of span). Independently expected: write → sound ≈ 58–97 ms (write→capture) + 9–19 ms (monitor→mic) ≈ 70–115 ms ⇒ the **GoPro/decoder A/V offset ≈ 0 ± 30 ms**; the earlier hypothesis of a +250 ms camera bias is rejected (the 60 Hz laptop screen is accurate enough: ±15 ms). The 'flash minus click' numbers of the earlier clips can be trusted, modulo the click period: with 150 BPM clicks (400 ms) the wired reading (+238 ms) is ambiguous with −162 ms, the Bluetooth reading (−24) with +376/−424. Next: a wired clip with 120 BPM clicks (500 ms period; `support/click120.wav`) to separate +238 from −162.
 
+## 13c-13. Day 4: latency model resolved (GX014455: wired, 120 BPM click track, lead 85)
+
+`latency_analyze.py --lead 85 --skip 15 --min-lag -0.3 --max-lag 0.45`: **wired flash − click = median −181 ms** (p10 −199, p90 −164, 53/55 clicks). At 500 ms spacing this separates the two aliases of the 150 BPM wired clip (+238 ≡ −162 mod 400): the lights were **~170 ms early on the wired chain** (lead 85). Consequences:
+- Camera A/V offset ≈ 0 (screen-flash calibration), so the measurements are valid.
+- Bluetooth sound is ≈ **254–262 ms later** than wired ⇒ with lead 85 the BT lights were ≈ −424 ms (more than one 400 ms beat) early, i.e. they coincided with the *previous* beat's sound — which is why Bluetooth "looked in sync" in all earlier tests (a coincidence of tempo, not a calibration).
+- Software model: kick-path flash = grid-path(lead 95) + ≈ 118 ms (BT clips: +98 vs −20) ⇒ relative to the wired sound: **grid(lead 95) ≈ −180 ms, kick path ≈ −62 ms** (early), so the wired sound leaves the speaker ≥ ~130 ms after the capture tap (audio driver/ALSA buffering is larger than first assumed). (The earlier laptop-microphone measurement 'monitor→mic 9–19 ms' is invalid: the mic signal was saturated.)
+- New settings: **wired: `beat_lead_ms` 0, `light_delay_ms` 60** (expected: kick flashes ≈ 0 ms, predicted-beat flashes ≈ −25 ms, i.e. slightly early); **Bluetooth (`config/config_bt.yaml`): `light_delay_ms` 315** (60 + 254), lead 0. `light_delay_ms` delays all paths (also kick-triggered ones). Tool note: `latency_analyze.py`'s 'suggested beat_lead_ms' is only meaningful for the grid path and must be read modulo the click period; use two tempi (150 and 120 BPM) to dealias.
+- To verify (pending, two wired clips at 120 BPM with the new config): `run --flash-path grid --scene beat` (expect ≈ −25 ms) and `run --flash-path kick --scene beat` (expect ≈ 0 ms), analysed with `--lead 0 --min-lag -0.3 --max-lag 0.45`.
+
 ## 13d. Later hardware measurements (camera)
 
 **GoPro Hero 7 (≈ 240 fps)** was used for the first round (see §13c-8; the planned clips below were recorded and analysed) (the Sony a6000 tops out at 1080/60p, confirmed from its specs). Planned clips, in priority order:
