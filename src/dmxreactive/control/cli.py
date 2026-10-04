@@ -340,6 +340,34 @@ def cmd_preflight(args) -> int:
     return 0 if good else 1
 
 
+def cmd_gobo_walk(args) -> int:
+    """Step the moving head's gobo channel through raw DMX values so the real patterns (and the
+    DMX value where each one starts) can be noted down by eye."""
+    config = load_config(args.config)
+    host, _, port = (args.target or "").partition(":")
+    fixture = config.patch.get(args.fixture)
+    values = list(range(args.start, args.stop + 1, args.step))
+    fixture.set("dimmer", args.dimmer)
+    fixture.set("color", "white")
+    t_total = args.lead_in + len(values) * args.hold
+    state = {"i": -1}
+    print(f"Gobo walk on {fixture.name}: DMX {args.start}..{args.stop} step {args.step}, "
+          f"{args.hold:g} s each ({t_total:.0f} s). Aim the beam at a wall; Ctrl-C = blackout.")
+
+    def on_tick(elapsed: float) -> None:
+        i = int((elapsed - args.lead_in) // args.hold) if elapsed >= args.lead_in else -1
+        i = min(i, len(values) - 1)
+        if i >= 0 and i != state["i"]:
+            state["i"] = i
+            fixture.set_raw_dmx("gobo", values[i])
+            print(f"[{elapsed:5.1f}s] gobo DMX {values[i]:3d}")
+
+    run_output(config, on_tick, duration_s=t_total + 0.2, host=host or None,
+               port=int(port) if port else None)
+    print("Done, blackout sent")
+    return 0
+
+
 def cmd_hold(args) -> int:
     """Hold fixed channel values on one fixture (bring-up/debugging), then blackout."""
     config = load_config(args.config)
@@ -452,6 +480,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--target", help="override node as host[:port]")
     p.add_argument("--step-seconds", type=float, default=1.5)
     p.set_defaults(func=cmd_preflight)
+
+    p = sub.add_parser("gobo-walk", help="step the moving head's gobo channel (raw DMX)")
+    p.add_argument("fixture", nargs="?", default="mover1")
+    p.add_argument("--start", type=int, default=0)
+    p.add_argument("--stop", type=int, default=124, help="124 = end of the gobo-select range")
+    p.add_argument("--step", type=int, default=4)
+    p.add_argument("--hold", type=float, default=1.5, help="seconds per value")
+    p.add_argument("--lead-in", type=float, default=3.0)
+    p.add_argument("--dimmer", type=float, default=0.8)
+    p.add_argument("--target")
+    p.set_defaults(func=cmd_gobo_walk)
 
     p = sub.add_parser("hold", help="hold channel values on one fixture, e.g. hold mover1 pan=0.2")
     p.add_argument("fixture")
