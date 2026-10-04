@@ -598,6 +598,17 @@ Found while preparing it: `LoopStats.errors` grew without bound (~15 MB per 3 h)
 ### Soak result (3 h, 2026-10-03 18:54–21:54): **PASS**
 179 one-minute samples, 83 tracks played (looping the 7-track playlist, including the live recordings): RSS 41.6 → 41.9 MB (**+0.10 MB over 174 min after warm-up**, i.e. no leak), threads constant at 5, open fds constant at 9; CPU 37–38 % of one core (analysis + show + output + capture, steady); **40.0 packets/s in every sample**, 0 sequence gaps, 0 bad packets, 0 send errors, 0 analysis errors; **0 late ticks** (worst single tick 16.6 ms), 0 dropped audio blocks, 0 capture restarts. Scenes at the sample times: beat 119, drive 51, ambient 9. Activity: 24,474 flashes (≈ 8,150/h) and 299 drop blasts (≈ 100/h, i.e. about one per 36 s on this dance-heavy playlist; `drop_min_gap_s` is the knob if that is too frequent). In parallel the user ran the real rig from YouTube for the same period without issues.
 
+## 13c-12. Day 4 (2026-10-04): wired audio, unplug test, hardware inventory
+
+**Hardware inventory (as used):** HP EliteBook x360 830 G8 (Fedora KDE, PipeWire); Eurolite DXT PoE Art-Net Node I (USB-C powered, 192.168.1.20, universe 1); Fun Generation PicoSpot 20 LED (9-ch, address 1) and LED Pot Strobe 100 (3-ch, address 10); **USB-Ethernet dongle: TP-Link UE200(UN) ver. 2.0 (USB-A, Fast Ethernet)**; **Bluetooth speaker: Music Sound BTSPKMSBOOMBOXX, model FB-2808-C**; **mixer: K BOX Sunfly SFA-108 (karaoke mic mixer)**; Sony a6000 and GoPro Hero 7 for measurements.
+**Audio chains:** (a) Bluetooth: PC → BT speaker (default sink `bluez_output…`, sound ~150–250 ms late); (b) wired: PC headphone jack (3.5 mm, sink `alsa_output…HiFi__Headphones__sink`) → 3.5 mm-to-RCA cable → mixer's two RCA inputs → mixer's two RCA outputs → cable to the speaker's 3.5 mm AUX input. Microphones plugged into the mixer are not heard by the PC (the lights follow the backing track only).
+
+Results today:
+- Pre-flight is clean on the wired chain (audio output = Headphones sink, capture level up to −12 dBFS) and shows the Bluetooth warning with the BT speaker as default output.
+- **Unplug/replug (output removed while a song plays):** verified with virtual sinks that the capture follows automatically (reopened within ~0.5 s on the new default, restarts 1 then 2, level restored); on the real laptop YouTube itself stops when its output vanishes, the lights fade to dark (no audio) and everything runs again once playback resumes — intended behaviour.
+- **Important correction:** **all earlier latency measurements (GoPro click tests, §13c-8/9, `beat_lead_ms` 85) were made with the Bluetooth speaker**, i.e. against sound delayed by the BT link. The wired AUX chain has the sound earlier, so the lead/light delay values must be re-measured for each chain. Subjectively the timing looks good on the wired chain.
+- Plan: two GoPro click-track clips (wired and Bluetooth) → the difference of the two medians is the Bluetooth latency; wired result sets `beat_lead_ms`; Bluetooth gets `show.light_delay_ms`.
+
 ## 13d. Later hardware measurements (camera)
 
 **GoPro Hero 7 (≈ 240 fps)** was used for the first round (see §13c-8; the planned clips below were recorded and analysed) (the Sony a6000 tops out at 1080/60p, confirmed from its specs). Planned clips, in priority order:
