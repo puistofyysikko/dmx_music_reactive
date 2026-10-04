@@ -622,6 +622,9 @@ Results today:
 - Together with the software estimate (−64 ms at lead 85 + capture 20–30 + node ≤ 25 + sound path 15 ⇒ lights ≈ 40 ms *early* on wired) the +238 ms wired GoPro reading implies a constant camera/decoder offset of roughly +250–280 ms (the same offset also explains the −24 ms Bluetooth reading, which would otherwise be ≈ −300).
 - New objective calibration, **`tools/av_sync_flash.py`**: the laptop flashes its whole screen white and plays a click at the same instant (every 1.2 s, ~0.8 Hz); film the screen with the speaker audible and analyse with `latency_analyze.py clip --lead 0 --skip 3 --min-lag -0.6 --max-lag 0.6`: the result is the camera's A/V offset (± the laptop's display/audio delay difference, a few tens of ms). Pending: user's clip.
 
+### Camera A/V calibration result (GX014454, screen flash + click, laptop speakers)
+Screen flash (fades up over ~20 ms, 120 ms on) vs click: **flash 101 ms before the click** (median −101, p10 −108, p90 −80, 14 pairs; onset = 30 % of span). Independently expected: write → sound ≈ 58–97 ms (write→capture) + 9–19 ms (monitor→mic) ≈ 70–115 ms ⇒ the **GoPro/decoder A/V offset ≈ 0 ± 30 ms**; the earlier hypothesis of a +250 ms camera bias is rejected (the 60 Hz laptop screen is accurate enough: ±15 ms). The 'flash minus click' numbers of the earlier clips can be trusted, modulo the click period: with 150 BPM clicks (400 ms) the wired reading (+238 ms) is ambiguous with −162 ms, the Bluetooth reading (−24) with +376/−424. Next: a wired clip with 120 BPM clicks (500 ms period; `support/click120.wav`) to separate +238 from −162.
+
 ## 13d. Later hardware measurements (camera)
 
 **GoPro Hero 7 (≈ 240 fps)** was used for the first round (see §13c-8; the planned clips below were recorded and analysed) (the Sony a6000 tops out at 1080/60p, confirmed from its specs). Planned clips, in priority order:
