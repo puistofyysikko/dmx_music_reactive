@@ -266,7 +266,7 @@ def drop_scenario_feats():
 
 
 def test_drop_blast_lasts_about_a_second_and_a_half_and_is_white():
-    show, patch = new_show(drop_duration_s=1.5)
+    show, patch = new_show(drop_duration_s=1.5, drop_blackout_every_s=0)
     ticks = simulate(show, drop_scenario_feats())
     mv = mover(ticks, 7).astype(float)
     # blast start: first tick after the pad where the mover jumps to ~full master brightness
@@ -282,7 +282,7 @@ def test_drop_blast_lasts_about_a_second_and_a_half_and_is_white():
 
 
 def test_drop_blast_stutter_respects_the_flash_cap():
-    show, _ = new_show(drop_duration_s=2.0, max_flash_hz=8.0)
+    show, _ = new_show(drop_duration_s=2.0, max_flash_hz=8.0, drop_blackout_every_s=0)
     ticks = simulate(show, drop_scenario_feats())
     sv = strobe_series(ticks)
     window = [(tk.t, v) for tk, v in zip(ticks, sv, strict=False) if 31.5 < tk.t < 34.5]
@@ -360,3 +360,37 @@ def test_negative_lead_delays_the_predicted_beat_flashes(clicks150):
     n = min(len(base), len(delayed))
     shift = np.median((delayed[:n] - base[:n]) % 0.4) * 1000
     assert 15 <= shift <= 50  # about +30 ms (one render frame of 33 ms quantisation)
+
+
+def test_a_drop_can_go_dark_then_pop():
+    show, _ = new_show(drop_blackout_every_s=1.0, drop_blackout_s=1.5)
+    ticks = simulate(show, drop_scenario_feats())
+    assert show.dark_drops == 1 and show.drops == 1
+    i0 = round(show._last_drop * 30)
+    dark = ticks[i0 + 2:i0 + 42]  # inside the 1.5 s dark part (skip the 2-tick fade-in)
+    assert mover(dark, 7).max() == 0 and mover(dark, 8).max() == 0  # head fully dark, no bursts
+    stutter = strobe_series(dark)
+    assert stutter.max() > 0.45 * 255 and (stutter == 0).sum() >= 8  # flashing in true darkness
+    pop = ticks[i0 + 46:i0 + 60]  # 1.5 s .. 2.0 s after the drop
+    assert mover(pop, 7).max() >= 0.8 * 255 * 0.95
+    assert pop[0].dmx["mover1"][5] == 5  # white
+    assert mover(ticks[i0 + 110:i0 + 125], 7).max() < 0.8 * 255 * 0.95  # blast over, normal again
+
+
+def test_dark_drops_are_rationed_and_other_drops_are_white_blasts():
+    pad = 0.15 * sine_pad(8.0)
+    x = np.concatenate([click_track(150, 24.0, SR), pad, click_track(150, 20.0, SR), pad,
+                        click_track(150, 12.0, SR)])
+    show, _ = new_show(drop_blackout_every_s=300.0)
+    simulate(show, analyse(x))
+    assert show.drops >= 2 and show.dark_drops == 1  # only the first one may go dark
+
+
+def test_no_dark_drop_when_flashing_is_off_or_the_feature_is_disabled():
+    for kwargs, key in (({"drop_blackout_every_s": 0.0}, None),
+                        ({"drop_blackout_every_s": 5.0}, "s")):
+        show, _ = new_show(**kwargs)
+        if key:
+            show.command(key)
+        simulate(show, drop_scenario_feats())
+        assert show.drops >= 1 and show.dark_drops == 0

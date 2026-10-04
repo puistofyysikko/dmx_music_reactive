@@ -639,6 +639,13 @@ Screen flash (fades up over ~20 ms, 120 ms on) vs click: **flash 101 ms before t
 - Kick-triggered flashes: **+17 ms** (p10 +5, p90 +36; 48/60 clicks); expected 0 → ok.
 Both within ~20 ms of the model. Trim: `beat_lead_ms` **−30** (delays only the predicted-beat flashes → ≈ −10 ms; kicks stay at +17 ms) in all three configs (wired, Bluetooth, example); `light_delay_ms` stays 60 (wired) / 315 (Bluetooth). `latency_analyze.py` now warns when a reading is larger than a quarter of the click period (alias risk).
 
+## 13c-14. Day 4 (continued): dark drops, PicoSpot questions, downbeat idea
+
+- User installed the desktop launcher; the browser GUI is not needed now (the terminal panel is liked) — **kept as a future idea** (a light web UI on top of the existing control API if interest grows).
+- **Dark drop (user's idea, implemented):** at a detected drop the *moving head goes completely dark* for `drop_blackout_s` (1.5 s) while the strobe stutters (6 Hz, true darkness between flashes), then the head **pops back to full white** for 0.4 s and fades over 1 s (total ≈ 2.9 s). Rationed by `drop_blackout_every_s` (**90 s**; 0 = never): the first drop after the cooldown goes dark, the other drops stay ordinary white blasts. Falls back to the white blast when flashing is off (`s`). Simulation on the user's tracks: LSD 8 drops → 2 dark, Timeless 5 → 1 (the main drop at 39.5 s), Digital Playground 5 → 2, Falco 2 → 1, Ti Amo 2 → 1. 110 tests pass (dark part fully dark incl. mover bursts, true-dark stutter, white pop, ration, off-cases).
+- **PicoSpot:** the tilt range question is settled by the manual (**tilt 230°**, pan 540°; the 200° came from a shop listing), no limits were hit in tests. The manual gives no gobo patterns or per-gobo DMX boundaries (only "gobo selection 0–124" for 7 static gobos + open, "shake" 125–249, "gobo wheel selection" 250–255); the manual's images are only logos. Gobos stay unused until the user checks the real wheel.
+- **Downbeat accent** (explained to the user; not implemented): estimate which beat of the 4-beat bar is the "one", then align bar-level effects to it (mover flash on the one instead of "every 4th flash event", colour change on the bar, drops land on bar boundaries, a stronger accent on the one).
+
 ## 13d. Later hardware measurements (camera)
 
 **GoPro Hero 7 (≈ 240 fps)** was used for the first round (see §13c-8; the planned clips below were recorded and analysed) (the Sony a6000 tops out at 1080/60p, confirmed from its specs). Planned clips, in priority order:

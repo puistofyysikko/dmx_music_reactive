@@ -42,6 +42,8 @@ show:
   mover_flash_hz: 8          # strobe rate in a burst (the profile's 10 Hz cap applies)
   mover_flash_hold_ms: 200   # dimmer mode: hold flashes this long (its dimmer needs ~170 ms)
   drop_duration_s: 1.5       # drop blast: white, strobe stutter (6 Hz) then fade; 0.5-2 s
+  drop_blackout_every_s: 90  # at most this often a drop goes DARK (head off, strobe flashes, then pop); 0 = never
+  drop_blackout_s: 1.5       # length of the dark part; the other drops stay white blasts
   drop_dip: 0.25             # a breakdown = bass energy this far below the recent loud level
   drop_min_gap_s: 10         # at most one blast per this many seconds
   breath_period_s: 7         # ambient scene: moving head brightness breathes at this period

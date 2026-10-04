@@ -57,6 +57,9 @@ class ShowConfig:
     mover_flash_hz: float = 8.0  # strobe rate during a burst (the profile's safety cap applies)
     mover_flash_hold_ms: float = 200.0  # dimmer mode: hold flashes this long
     drop_duration_s: float = 1.5  # length of the drop blast (strobe stutter, then a fade)
+    drop_blackout_every_s: float = 90.0  # a drop may instead go DARK (only the strobe flashes,
+    #                                      then the head pops back) at most this often; 0 = never
+    drop_blackout_s: float = 1.5  # how long the dark part lasts
     drop_dip: float = 0.25  # a breakdown = bass energy this far below the recent loud reference
     drop_min_gap_s: float = 10.0  # at most one drop blast per this many seconds
     breath_period_s: float = 7.0  # ambient scene: the moving head's brightness breathes at this
@@ -260,8 +263,12 @@ class Show:
         self._last_drop = -1e9
         self._blast_t0: float | None = None
         self._force_white = False
+        self._blast_style = "flash"  # "flash" (white blast) or "blackout" (dark, then a pop)
+        self._last_blackout_t = -1e9
+        self._was_dark = False
         self.events: deque[tuple[float, str]] = deque(maxlen=8)  # (show time, message) for the UI
         self.drops = 0
+        self.dark_drops = 0  # drops that went dark (blackout style)
         self.last_beat_t = self.last_kick_t = self.last_flash_t = -1e9
         self._flash_total = 0
         self._bass_avg = 0.0
@@ -338,10 +345,18 @@ class Show:
             self.last_flash_t = self.t
         intents = self._blend(ctx, dt)
         if ctx.drop:
+            cfg = self.cfg
+            dark = (cfg.drop_blackout_every_s > 0 and self.strobe_enabled
+                    and self.t - self._last_blackout_t >= cfg.drop_blackout_every_s
+                    and any(f.group == "movers" for f in self.patch.fixtures))
+            self._blast_style = "blackout" if dark else "flash"
+            if dark:
+                self._last_blackout_t = self.t
+                self.dark_drops += 1
             self._blast_t0, self._force_white = self.t, True
             self.drops += 1
-            self.log_event("DROP -> blast")
-            log.info("drop -> blast")
+            self.log_event("DROP -> blackout + strobe, then pop" if dark else "DROP -> blast")
+            log.info("drop -> %s", self._blast_style)
         self._overlay_blast(intents)
         self._update_master(silent, dt)
         self._apply(intents, dt)
@@ -420,25 +435,37 @@ class Show:
             self._drop_high = 0.0
         return False
 
-    def _blast_levels(self) -> tuple[float, float] | None:
-        """(strobe level, mover level) of the drop blast, or None when it is not running.
+    def _blast_levels(self) -> tuple[float, float, bool] | None:
+        """(strobe level, mover level, mover forced dark) of the drop effect, or None.
 
-        Strobe light: 6 Hz stutter (under the flash cap) for the first 40 % of the blast, then
-        a linear fade. Moving head: full hold for the stutter part, then the same fade (its
-        dimmer is too slow for stutter)."""
+        "flash" style: the strobe light stutters at 6 Hz (under the flash cap) for the first
+        40 % of `drop_duration_s` and then fades; the moving head jumps to full white, holds
+        through the stutter part and fades with it.
+        "blackout" style: for `drop_blackout_s` the moving head is forced DARK while the strobe
+        stutters in true darkness (6 Hz, off = 0), then the head pops back to full white for
+        0.4 s and fades over 1 s."""
         if self._blast_t0 is None:
             return None
-        dur = self.cfg.drop_duration_s
         rel = self.t - self._blast_t0
+        if self._blast_style == "blackout":
+            dark = self.cfg.drop_blackout_s
+            if rel >= dark + 1.4:
+                self._blast_t0 = None
+                return None
+            if rel < dark:
+                return (1.0 if (rel * 6.0) % 1.0 < 0.55 else 0.0), 0.0, True
+            if rel < dark + 0.4:
+                return 0.0, 1.0, False
+            return 0.0, 1.0 - (rel - dark - 0.4), False
+        dur = self.cfg.drop_duration_s
         if rel >= dur:
             self._blast_t0 = None
             return None
         stutter = 0.4 * dur
         fade = 1.0 - (rel - stutter) / (dur - stutter)
         if rel < stutter:
-            on = (rel * 6.0) % 1.0 < 0.55
-            return (1.0 if on else 0.2), 1.0
-        return fade, fade
+            return (1.0 if (rel * 6.0) % 1.0 < 0.55 else 0.2), 1.0, False
+        return fade, fade, False
 
     def _update_mood(self, c: Ctx, dt: float) -> None:
         if self.override != "auto":
@@ -495,13 +522,23 @@ class Show:
         levels = self._blast_levels()
         if levels is None:
             return
-        strobe_level, mover_level = levels
+        strobe_level, mover_level, forced_dark = levels
+        if self._was_dark and not forced_dark:
+            self._force_white = True  # the pop at the end of a dark drop is white
+        self._was_dark = forced_dark
         for fx in self.patch.fixtures:
             want = intents.setdefault(fx.name, {})
             if fx.group == "strobes" and self.strobe_enabled:
-                want["dimmer"] = max(float(want.get("dimmer", 0.0)), strobe_level)
+                scene = float(want.get("dimmer", 0.0))
+                # blackout style: a clean stutter in the dark, no scene flashes mixed in
+                want["dimmer"] = strobe_level if self._blast_style == "blackout" and (
+                    forced_dark) else max(scene, strobe_level)
             elif fx.group == "movers":
-                want["dimmer"] = max(float(want.get("dimmer", 0.0)), mover_level)
+                if forced_dark:
+                    want["dimmer"] = 0.0
+                    want["strobe_hz"] = 0.0  # no mover flash bursts either
+                else:
+                    want["dimmer"] = max(float(want.get("dimmer", 0.0)), mover_level)
 
     def _update_master(self, silent: bool, dt: float) -> None:
         self._silent_for = self._silent_for + dt if silent else 0.0

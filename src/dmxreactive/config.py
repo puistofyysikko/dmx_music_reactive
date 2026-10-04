@@ -113,6 +113,8 @@ def load_config(path: str | Path | None = None) -> Config:
         mover_flash_hz=float(sh.get("mover_flash_hz", d.mover_flash_hz)),
         mover_flash_hold_ms=float(sh.get("mover_flash_hold_ms", d.mover_flash_hold_ms)),
         drop_duration_s=float(sh.get("drop_duration_s", d.drop_duration_s)),
+        drop_blackout_every_s=float(sh.get("drop_blackout_every_s", d.drop_blackout_every_s)),
+        drop_blackout_s=float(sh.get("drop_blackout_s", d.drop_blackout_s)),
         drop_dip=float(sh.get("drop_dip", d.drop_dip)),
         drop_min_gap_s=float(sh.get("drop_min_gap_s", d.drop_min_gap_s)),
         breath_period_s=float(sh.get("breath_period_s", d.breath_period_s)),
@@ -126,6 +128,8 @@ def load_config(path: str | Path | None = None) -> Config:
         raise ProfileError("show.mover_flash_mode must be strobe or dimmer")
     if not 0.0 < show.mover_flash_hz <= 10.0:
         raise ProfileError("show.mover_flash_hz must be in (0, 10]")
+    if show.drop_blackout_every_s < 0 or not 0.3 <= show.drop_blackout_s <= 4.0:
+        raise ProfileError("show.drop_blackout_every_s must be >= 0, drop_blackout_s 0.3-4 s")
     if not 0.2 <= show.drop_duration_s <= 4.0:
         raise ProfileError("show.drop_duration_s must be between 0.2 and 4 seconds")
     if not 0.0 <= show.breath_depth <= 1.0 or show.breath_period_s < 1.0:
