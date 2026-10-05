@@ -58,6 +58,11 @@ def _fixture_row(fx) -> tuple[Text, Text]:
         name = next((s for s, d in ch["color"].slots.items() if d == v), "…")
         parts.append("■ ", style=_COLOURS.get(name, "white"))
         parts.append(f"{name} ")
+    if "gobo" in ch and ch["gobo"].kind == "select":
+        v = vals[ch["gobo"].offset]
+        gname = next((s for s, d in ch["gobo"].slots.items() if d == v), "…")
+        if gname != "open":
+            parts.append(f"gobo {gname} ", style="bold magenta")
     if "strobe" in ch and vals[ch["strobe"].offset] > 0:
         parts.append(" STROBE", style="bold yellow")
     return Text(f"{fx.name}", style="bold"), parts

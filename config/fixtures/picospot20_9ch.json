@@ -11,7 +11,9 @@
     { "offset": 5, "name": "color", "kind": "select", "default": "white",
       "slots": { "white": 5, "red": 16, "orange": 27, "yellow": 38,
                  "green": 49, "blue": 60, "cyan": 71, "purple": 82 } },
-    { "offset": 6, "name": "gobo",  "kind": "continuous", "dmx_range": [0, 124], "default": 0.0 },
+    { "offset": 6, "name": "gobo", "kind": "select", "default": "open",
+      "slots": { "open": 8, "ring": 24, "petals": 40, "star": 56,
+                 "mosaic": 72, "dots": 88, "swirl": 104, "slats": 120 } },
     { "offset": 7, "name": "dimmer", "kind": "continuous", "default": 0.0 },
     { "offset": 8, "name": "strobe", "kind": "rate", "off": 0, "dmx_range": [10, 255],
       "hz_range": [1, 25], "safe_max_hz": 10, "default": 0.0 }

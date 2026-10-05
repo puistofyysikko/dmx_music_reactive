@@ -107,6 +107,9 @@ def load_config(path: str | Path | None = None) -> Config:
         drive_energy=float(sh.get("drive_energy", d.drive_energy)),
         drive_flash_gate=float(sh.get("drive_flash_gate", d.drive_flash_gate)),
         drive_min_confidence=float(sh.get("drive_min_confidence", d.drive_min_confidence)),
+        gobo_mode=str(sh.get("gobo_mode", d.gobo_mode)),
+        gobo_palette=tuple(str(x) for x in sh.get("gobo_palette", d.gobo_palette)),
+        gobo_hold_s=float(sh.get("gobo_hold_s", d.gobo_hold_s)),
         bar_min_confidence=float(sh.get("bar_min_confidence", d.bar_min_confidence)),
         mover_flash_every=int(sh.get("mover_flash_every", d.mover_flash_every)),
         mover_flash_mode=str(sh.get("mover_flash_mode", d.mover_flash_mode)),
@@ -125,6 +128,12 @@ def load_config(path: str | Path | None = None) -> Config:
         raise ProfileError("show.max_flash_hz must be in (0, 10]")
     if not 0.0 <= show.light_delay_ms <= 600.0:
         raise ProfileError("show.light_delay_ms must be between 0 and 600")
+    if show.gobo_mode not in ("auto", "off"):
+        raise ProfileError("show.gobo_mode must be auto or off")
+    known = {"open", "ring", "petals", "star", "mosaic", "dots", "swirl", "slats"}
+    unknown = sorted(set(show.gobo_palette) - known)
+    if unknown:
+        raise ProfileError(f"show.gobo_palette: unknown gobo(s) {unknown}")
     if show.mover_flash_mode not in ("strobe", "dimmer"):
         raise ProfileError("show.mover_flash_mode must be strobe or dimmer")
     if not 0.0 < show.mover_flash_hz <= 10.0:

@@ -657,7 +657,26 @@ Work and findings:
 4. **Show integration** (`bar_min_confidence` 0.35): in the beat scene, with a trusted bar position the strobe flash on the one is full strength and the other beats 0.8×; the moving head's flash burst fires **on the one** (otherwise it falls back to every 4th flash event); colour changes every 2 bars aligned to bar starts (otherwise every 8 beats from an arbitrary start). Status panel shows `bar 1 2 3 4 (confidence)` with the one highlighted; `dmxreactive analyze` prints `bar N`.
 5. **Ear test tool:** `tools/bar_check.py song.mp3 out.wav` renders the track with a loud beep on every detected one and a quiet tick on the other beats; four files were generated in `support/tracks/` (Timeless 66 ones, mean confidence 0.89; Digital Playground 85, 0.78; Poison 25, 0.80; Falco 31, 0.87). 115 tests pass.
 Known limits: 4/4 only; ambiguous on vocal/karaoke music (confidence stays low there, so effects fall back); after a grid re-lock the bar position must be found again (several bars).
-Future (not done): kill the lights on the last beat before a predicted drop using bar/phrase counting.
+Future (not done): kill the lights on the last beat before a predicted drop using bar/phrase counting; browser GUI (low priority).
+
+## 13c-16. Day 5 (2026-10-05): feedback, PicoSpot gobo wheel decoded from video
+
+User feedback: bar_check tracks all sound solid, no slipping; downbeat looks right from the panel indicator and the lights, though the continuously moving head makes it hard to judge; the **dark drop will be judged in about a week** when the remaining ambient wall lights are in place; overall: "close to commercial systems", rapid kick transitions look great on hardstyle/frenchcore.
+
+**PicoSpot gobo wheel** — from the user's phone video `VID_20261005_175302715.mp4` (1920×864, 30 fps, 54.6 s; beam patterns on the left, terminal on the right) of `gobo-walk` (DMX 0…124 step 4, 1.5 s each, 3 s lead-in): pattern segmentation by mask differencing found 8 stable patterns separated by transitions at 10.3, 16.3, 22.3, 28.3, 34.4, 40.3, 46.4 s; with the start of the beam at T0 ≈ 1.2 s and the value k applied at T0 + 3 + 1.5·k these are the commands for DMX 16, 32, 48, 64, 80, 96, 112 (the boundary lies within 4 DMX below each; each gobo spans exactly 16 values, i.e. 8 positions × 16 = 128, "shake" begins at 125 per the manual):
+
+| DMX | Pattern | slot name (profile) |
+|-----|---------|---------------------|
+| 0–15 | open, plain circle | `open` (8) |
+| 16–31 | ring broken into four arcs | `ring` (24) |
+| 32–47 | petal starburst (elongated ellipses around a hub) | `petals` (40) |
+| 48–63 | spoked star with round tips | `star` (56) |
+| 64–79 | brick mosaic (scattered rectangles) | `mosaic` (72) |
+| 80–95 | scattered dots/bubbles | `dots` (88) |
+| 96–111 | swirl (three curved blades) | `swirl` (104) |
+| 112–127 | diagonal slats | `slats` (120) |
+
+Implementation: `gobo` is now a **select channel** in `picospot20_9ch.json` (default `open`); the show picks gobos from `show.gobo_palette` (default open, dots, star, swirl, petals, mosaic; `ring` and `slats` available), **changing on bar boundaries** — every 4 bars when the bar position is trusted (else every 32 beats; drive scene ≈ 16 s; ambient scene one change per ~45 s), never faster than `gobo_hold_s` (5 s, the wheel is mechanical), always **open during the drop effect**; `gobo_mode: off` keeps it open; the status panel shows the active non-open gobo. 4 new tests, **119 pass**.
 
 ## 13d. Later hardware measurements (camera)
 

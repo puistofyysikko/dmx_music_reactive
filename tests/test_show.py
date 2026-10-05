@@ -427,3 +427,41 @@ def test_without_a_trusted_bar_the_old_every_nth_behaviour_remains(clicks150):
     starts = [i for i in range(1, len(burst)) if burst[i] > 0 >= burst[i - 1]]
     strobe_flashes = flash_times(strobe_series(ticks), ticks)
     assert 0.15 < len(starts) / max(len(strobe_flashes), 1) < 0.4
+
+
+def gobo_series(ticks):
+    return np.array([tk.dmx["mover1"][6] for tk in ticks])
+
+
+def test_gobo_follows_the_bars_and_respects_the_hold_time():
+    from test_analysis import bar_track
+
+    x, _ = bar_track(150.0, 80.0)
+    show, _ = new_show(scene="beat", gobo_hold_s=5.0)
+    ticks = simulate(show, analyse(x))
+    g = gobo_series(ticks)
+    changes = [ticks[i].t for i in range(1, len(g)) if g[i] != g[i - 1]]
+    assert len(changes) >= 2  # the palette moves on (4 bars = 6.4 s at 150 BPM)
+    assert np.min(np.diff(changes)) >= 5.0 - 1 / 30 - 1e-6  # the wheel is never hurried
+    assert set(np.unique(g)) <= {8, 24, 40, 56, 72, 88, 104, 120}  # real slot centres only
+
+
+def test_gobo_mode_off_keeps_the_beam_open(clicks150):
+    show, _ = new_show(scene="beat", gobo_mode="off")
+    assert set(np.unique(gobo_series(simulate(show, clicks150)))) == {8}
+
+
+def test_the_drop_effect_uses_the_open_gobo():
+    show, _ = new_show(drop_blackout_every_s=0, gobo_hold_s=0.5, gobo_palette=("dots", "swirl"))
+    ticks = simulate(show, drop_scenario_feats())
+    i0 = round(show._last_drop * 30)
+    during = gobo_series(ticks[i0 + 3:i0 + 30])  # inside the white blast
+    assert (during == 8).all()
+
+
+def test_ambient_gobo_drifts_slowly():
+    show, _ = new_show(scene="ambient", gobo_hold_s=5.0)
+    ticks = simulate(show, steady_tone_feats(100))
+    g = gobo_series(ticks)
+    changes = [i for i in range(1, len(g)) if g[i] != g[i - 1]]
+    assert 1 <= len(changes) <= 3  # one change per ~45 s

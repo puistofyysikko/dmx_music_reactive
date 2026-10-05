@@ -50,6 +50,9 @@ class ShowConfig:
     #                           keep much of their punch above the 20-150 Hz band)
     drive_flash_gate: float = 0.25  # in the drive scene the kick events are the evidence
     drive_min_confidence: float = 0.15  # ...and some periodicity (rules out pure noise)
+    gobo_mode: str = "auto"  # auto: gobo changes on bar boundaries (see palette); off: open
+    gobo_palette: tuple[str, ...] = ("open", "dots", "star", "swirl", "petals", "mosaic")
+    gobo_hold_s: float = 5.0  # minimum time between gobo changes (the wheel is mechanical)
     bar_min_confidence: float = 0.35  # trust the detected bar position only above this
     mover_flash_every: int = 4  # every Nth flash event the moving head flashes too (0 = never)
     mover_flash_mode: str = "strobe"  # "strobe": burst the head's built-in strobe (crisp);
@@ -93,6 +96,13 @@ class Ctx:
 
 
 Intent = dict[str, dict[str, float | str]]  # fixture name -> channel -> value
+
+
+def pick_gobo(cfg: ShowConfig, step: int, offset: int = 0) -> str:
+    """The gobo for the `step`-th phrase (the palette cycles); "open" when gobos are off."""
+    if cfg.gobo_mode == "off" or not cfg.gobo_palette:
+        return "open"
+    return cfg.gobo_palette[(step + offset) % len(cfg.gobo_palette)]
 
 
 class BeatScene:
@@ -186,6 +196,7 @@ class BeatScene:
                 "tilt": tilt_lo + tilt * (tilt_hi - tilt_lo),
                 "speed": 1.0,
                 "color": PALETTE[(bar + i) % len(PALETTE)],
+                "gobo": pick_gobo(cfg, (c.bar_no // 4) if self._bar_known else int(pos // 32), i),
                 "strobe_hz": cfg.mover_flash_hz if burst else 0.0,
             }
         return out
@@ -236,6 +247,7 @@ class AmbientScene:
                 "tilt": tilt_lo + tilt * (tilt_hi - tilt_lo),
                 "speed": 0.6,
                 "color": PALETTE[(int(c.t // 20) + i) % len(PALETTE)],
+                "gobo": pick_gobo(cfg, int(c.t // 45), i),
             }
         return out
 
@@ -246,6 +258,8 @@ class _MoverState:
     tilt: Slew = field(default_factory=lambda: Slew(0.8))
     colour: str = ""
     colour_t: float = -1e9
+    gobo: str = "open"
+    gobo_t: float = -1e9
 
 
 class Show:
@@ -594,6 +608,14 @@ class Show:
                 fx.set("speed", clamp01(float(want["speed"])))
             if self._force_white and fx.has("color") and fx.group == "movers":
                 st.colour, st.colour_t = "white", self.t  # the blast is white, whatever the hold
+            if "gobo" in want and fx.has("gobo"):
+                gobo = str(want["gobo"])
+                if self._blast_t0 is not None and fx.group == "movers":
+                    gobo = "open"  # the drop effect is a clean white beam
+                if gobo != st.gobo and (self.t - st.gobo_t >= self.cfg.gobo_hold_s
+                                        or gobo == "open" and self._blast_t0 is not None):
+                    st.gobo, st.gobo_t = gobo, self.t
+                fx.set("gobo", st.gobo)
             if "color" in want and fx.has("color"):
                 colour = str(want["color"])
                 if colour != st.colour and self.t - st.colour_t >= self.cfg.colour_hold_s:
