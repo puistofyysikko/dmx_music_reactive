@@ -1,0 +1,65 @@
+# Copy to config/config.yaml (git-ignored) and adjust.
+
+node:
+  host: 192.168.1.20      # Eurolite DXT PoE Art-Net Node I (factory IP, sticker on the underside)
+  port: 6454
+  net: 0                  # Art-Net Net / SubNet / Universe as set on the node's web page
+  subnet: 0
+  universe: 1             # node factory default is Art-Net Universe 1 (Port 1)
+
+output:
+  rate_hz: 40             # DMX frame rate = the node's 40 Hz output (measured: less flash jitter)
+
+audio:
+  device: "@DEFAULT_MONITOR@"   # monitor of the current default output (follows speaker/mixer switch)
+  sample_rate: 48000
+  block_size: 1024              # 21 ms per block
+  latency_ms: 10
+
+show:
+  beat_lead_ms: -30       # negative = delay: GoPro-calibrated (wired: predicted beats were -40 ms with 0, kicks +17 ms)
+  max_flash_hz: 8         # hard cap on dimmer-pulse flashes per second (<= 10)
+  flash_decay_ms: 70
+  master: 0.8             # overall brightness ceiling (+/- keys change it live)
+  pan_limits: [0.2, 0.8]  # normalised range the moving head may use (keep the beam off faces)
+  tilt_limits: [0.3, 0.8]
+  scene: auto             # auto | beat | ambient | drive
+  colour_hold_s: 1.5      # min time between colour-wheel changes (mechanical)
+  silence_fade_s: 2.0
+  light_delay_ms: 60         # wired chain: lights are otherwise ~60 ms ahead of the sound on kick flashes
+  flash_gate: 0.35        # no beat flash below this bass energy (breakdowns stay dark); 0 = always
+  kick_flash_strength: 0.6   # strong bass hits between grid beats also flash; >1 disables this
+  ambient_flash_energy: 0.75 # in the ambient scene only very strong bass hits flash (drops)
+  ambient_flash_rise_db: 6   # ...and only real transients (bass jump in dB)
+  ambient_flash_hz: 3
+  drive_kick_rate: 2.0       # kicks/s that mark kick-dense music (frenchcore): "drive" scene
+  drive_energy: 0.2          # ...with at least this bass energy (distorted kicks live above 150 Hz)
+  drive_flash_gate: 0.25     # drive scene: flash on kick events if bass energy is at least this
+  drive_min_confidence: 0.15 # ...and some periodicity (rules out pure noise)
+  gobo_mode: auto            # auto: moving head gobo changes on bar boundaries (see palette); off: always open
+  gobo_palette: [open, dots, star, swirl, petals, mosaic]   # also: ring, slats (PicoSpot, video-verified)
+  gobo_hold_s: 5             # min time between gobo changes (mechanical wheel)
+  bar_min_confidence: 0.35   # act on the detected bar (downbeat) only when it is this clear
+  mover_flash_every: 4       # every 4th flash event the moving head flashes too (0 = never)
+  mover_flash_mode: strobe   # strobe = burst the head's own strobe (crisp, camera-verified); dimmer = slow
+  mover_flash_ms: 250        # strobe-mode burst length (~2 flashes at 8 Hz)
+  mover_flash_hz: 8          # strobe rate in a burst (the profile's 10 Hz cap applies)
+  mover_flash_hold_ms: 200   # dimmer mode: hold flashes this long (its dimmer needs ~170 ms)
+  drop_duration_s: 1.5       # drop blast: white, strobe stutter (6 Hz) then fade; 0.5-2 s
+  drop_blackout_every_s: 90  # at most this often a drop goes DARK (head off, strobe flashes, then pop); 0 = never
+  drop_blackout_s: 1.5       # length of the dark part; the other drops stay white blasts
+  drop_dip: 0.25             # a breakdown = bass energy this far below the recent loud level
+  drop_min_gap_s: 10         # at most one blast per this many seconds
+  breath_period_s: 7         # ambient scene: moving head brightness breathes at this period
+  breath_depth: 0.6          # ...dipping to (1 - depth) of its level (0 = no breathing)
+
+# Profiles are looked up in config/fixtures/<profile>.json
+fixtures:
+  - name: mover1
+    profile: picospot20_9ch
+    address: 1
+    group: movers
+  - name: strobe1
+    profile: potstrobe100_3ch
+    address: 10
+    group: strobes

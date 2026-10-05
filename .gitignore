@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+config/config.yaml
+*.log
+support/*.MP4
+support/*.mp4
+support/*.MOV
+support/tracks/
+support/*.wav
+config/config_*.yaml
+support/*.png
+dmx_music_reactive_project_plan.md
