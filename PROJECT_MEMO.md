@@ -439,7 +439,7 @@ Still open:
 
 ---
 
-## 13a. Node settings (verified 2026-10-02, firmware V2.2, screenshot in `support/node_config_defaults.png`)
+## 13a. Node settings (verified 2026-10-02, firmware V2.2, screenshot kept locally in `support/node_config_defaults.png`, not committed (shows the node's MAC))
 
 Factory defaults kept: Static IP 192.168.1.20 / 255.255.255.0; Art-Net Net 0, SubNet 0, **Universe 1** (so our config uses `universe: 1`, port-address 1); Port 1 type **DMX Out 40 Hz** (node refreshes at 40 Hz; we send 30 Hz and it repeats the last frame in between). The node also has an sACN universe (= Art-Net address + 1) and a Light'J port, both unused.
 
@@ -717,7 +717,7 @@ Key findings to remember: PicoSpot speed channel is inverted (0 = fast); Pot Str
 2. **Measure end-to-end latency** (audio → light) with the camera (high-fps mode if the a6000 allows, else phone 240 fps) and set `beat_lead_ms` from data (§13d).
 3. **Phase 6 (mood engine, scenes, polish):** build-up → drop detection (energy trend + bass return) with a white flash/strobe burst within the cap; karaoke-friendly scene; more colour logic (bands/centroid → palette, warm for quiet, cool for loud); optional downbeat/bar detection for colour changes on the "one"; tap-tempo override; scene presets in config; a terminal status display (TUI) with DMX preview.
 4. **Launch/ops:** `scripts/run.sh` desktop launcher, event checklist rehearsal (§11), 30 min–3 h soak run (memory, jitter, dropped blocks), behaviour with the USB DAC/mixer as default output, audio device unplug/replug.
-5. **Small open items:** PicoSpot tilt range (200° vs 230°) and gobo list; high-fps strobe re-measurement (10–25 Hz); `git config user.name/email` is unset on this machine (commits so far use `tapsu <dudet.touko@gmail.com>` via per-command `-c`); decide whether to add the light browser GUI after Phase 6.
+5. **Small open items:** PicoSpot tilt range (200° vs 230°) and gobo list; high-fps strobe re-measurement (10–25 Hz); `git config user.name/email` is unset on this machine (commits so far use `tapsu <your email>` via per-command `-c`); decide whether to add the light browser GUI after Phase 6.
 
 ### Commands cheat-sheet
 `dmxreactive check-config | sim | test-fixtures | hold | strobe-sweep | list-devices | meter | analyze | record | run` (see README). Tools: `tools/analyze_track.py`, `tools/simulate_show.py`, `tools/click_eval.py`, `tools/strobe_analyze.py`, `tools/jitter_check.py`. Local-only files (git-ignored): `config/config.yaml`, `support/tracks/` (user's test tracks + live recordings), camera clips in `support/`.
