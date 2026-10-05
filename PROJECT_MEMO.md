@@ -1,6 +1,6 @@
 # DMX Music-Reactive Lighting — Project Memo (v2)
 
-Status: **Phases 0–5 built and committed (software verified; first supervised real-rig run of the live show pending)** · Last updated 2026-10-02 · Branch: `create/foundation` · Supersedes: `dmx_music_reactive_project_plan.md` (kept as the original draft)
+Status: **v0.1.0 merged into `main`; hardware-verified; waiting for the wall lights** · Last updated 2026-10-05 · Supersedes: `dmx_music_reactive_project_plan.md` (kept as the original draft)
 
 ---
 
@@ -698,26 +698,36 @@ Skipped on purpose: Pot Strobe above 10 Hz (the cap stays at 10 Hz).
 - Strobe mappings measured with camera (§6.2); safety caps in Hz (`safe_max_hz`).
 - Hardware verified 2026-10-02: node, both fixtures, channel walk, strobe rates. Still open: PicoSpot tilt range (200° vs 230°), gobo list, 10-minute jitter soak on the real network.
 
-## 14. Where we are and what comes next (updated 2026-10-02, end of day 1)
+## 14. Status and hand-off (updated 2026-10-05)
 
-### Done today (all committed, 75 tests green)
-| Phase | State |
-|-------|-------|
-| 0 Repo scaffold | done |
-| 1 Art-Net output, fixture profiles, fake node, channel walker | done, **hardware-verified** (node, PicoSpot, Pot Strobe; strobe mappings measured by camera) |
-| 3 Audio capture (PipeWire monitor via `parec`) | done, verified live (YouTube, 46.7 blocks/s, 0 drops) |
-| 4 Analysis (bands, kicks, tempo/beat, `beat_locked`) | done, verified on 4 tracks + 2 live recordings |
-| 5 Show engine + live runtime (`dmxreactive run`) | done in software, simulated on real tracks, real-time run against the fake node; **not yet run on the real rig** |
+**State:** v0.1.0 is merged into `main` (squash-merged from `create/foundation`; the user set up their own git identity and keeps their real email private). Everything below is built, committed, tested (119 tests) and verified on the real rig where hardware is involved.
 
-Key findings to remember: PicoSpot speed channel is inverted (0 = fast); Pot Strobe strobe period is linear in DMX value; beat-synced effects only when `beat_locked` (Ti Amo is a 12/8-feel ballad with no steady kick → ambient scene); `beat_lead_ms` (30) is a guess until measured.
+### What exists
+| Area | State |
+|------|-------|
+| Art-Net output, fixture profiles (PicoSpot 9-ch, Pot Strobe 3-ch), fake node, channel walker, ArtPoll discovery | done, hardware-verified |
+| Audio capture (PipeWire monitor via `parec`), device follow, unplug/replug recovery | done, verified (virtual sinks + real unplug) |
+| Analysis: bands, kicks, tempo 70–240 BPM with half-time preference, predicted beat grid, `beat_locked`, **bar/downbeat detection**, `bass_energy`, drop detection | done; tuned on 6 tracks (hardstyle, frenchcore, pop, karaoke, ballad) + live recordings; downbeat verified by ear (no slipping) |
+| Show: 3 scenes (beat / drive / ambient) with auto mood switching, flash limiter (≤ 8/s, hard cap 10), pan/tilt limits, colour & gobo wheel pacing, silence fade, blackout; **mover flash bursts, ambient breathing, drop blast, dark drop (≤ 1 per 90 s), gobos on bar boundaries, flash/colour changes aligned to the bar's one** | done; dark drop live test pending (needs the wall lights) |
+| Runtime: status panel (rich), `preflight` (network, node ArtPoll universe check, audio, Bluetooth warning), `scripts/start_show.sh` + desktop launcher, `docs/EVENT_CHECKLIST.md` | done; launcher installed by the user |
+| Timing: GoPro-calibrated (wired: `light_delay_ms` 60, `beat_lead_ms` −30; Bluetooth profile `config/config_bt.yaml`: delay 315) | done (§13c-9…13) |
+| Soak: 3 h silent soak (virtual sink + fake node) | PASS (§13c-11) |
 
-### Tomorrow — suggested order
-1. **Supervised first live run on the real rig** (user at the rig; beam away from faces):
-   `dmxreactive run --scene ambient`, then `dmxreactive run` with Falco/Timeless; try keys `b s a 1 2 + -`; Ctrl-C leaves everything dark. Collect feedback: flash timing early/late, mover speed/jerkiness, strobe brightness at master 0.8, ambient look on Ti Amo, colour change pacing. Adjust `show:` config values accordingly.
-2. **Measure end-to-end latency** (audio → light) with the camera (high-fps mode if the a6000 allows, else phone 240 fps) and set `beat_lead_ms` from data (§13d).
-3. **Phase 6 (mood engine, scenes, polish):** build-up → drop detection (energy trend + bass return) with a white flash/strobe burst within the cap; karaoke-friendly scene; more colour logic (bands/centroid → palette, warm for quiet, cool for loud); optional downbeat/bar detection for colour changes on the "one"; tap-tempo override; scene presets in config; a terminal status display (TUI) with DMX preview.
-4. **Launch/ops:** `scripts/run.sh` desktop launcher, event checklist rehearsal (§11), 30 min–3 h soak run (memory, jitter, dropped blocks), behaviour with the USB DAC/mixer as default output, audio device unplug/replug.
-5. **Small open items:** PicoSpot tilt range (200° vs 230°) and gobo list; high-fps strobe re-measurement (10–25 Hz); `git config user.name/email` is unset on this machine (commits so far use `tapsu <your email>` via per-command `-c`); decide whether to add the light browser GUI after Phase 6.
+### Waiting / next
+1. **Remaining lights (user is purchasing, an ambient/wall wash that illuminates the whole wall).** When they arrive: get model + manual (DMX modes and channel table), add `config/fixtures/<model>.json` (see the PicoSpot/Pot Strobe profiles for kinds `continuous`/`select`/`rate`/`fixed`), a patch entry with a free address block (convention: washes 100–199) and a new group (e.g. `washes`), then give the group roles in the scenes (`engine/show.py`): ambient = slow colour wash/breathing, beat = bass-following brightness with the one as accent, drop blast = white, **dark drop = wash also goes dark (the user wants all lights but the strobe to go dark)**, drive = fast colour steps. Check addresses against the other fixtures (`dmxreactive check-config`), run `preflight --walk`, and extend tests (`tests/test_show.py` helpers `new_show`, `mover`, `strobe_series`).
+2. **Pre-drop kill (agreed, not built):** darkness for the last beat (or two) before a predicted drop. Needs a *prediction*: breakdown length in bars (typically 8 or 16 bars; use the bar counter `bar_beat`/`bar_start` and the breakdown start from the drop detector's dip logic), then blackout on the last beat of the last bar and the drop blast on the one. Build and evaluate **offline on the user's tracks first** (how often the predicted drop time is within ±1 beat), report honestly; a wrong prediction costs only one needless dark beat; ration like the dark drop.
+3. **Live test of the dark drop** with the wall lights (user will judge `drop_blackout_s` 1.5 s and the 90 s ration).
+4. **Taste tuning** of gobo palette (`show.gobo_palette`; available: open, ring, petals, star, mosaic, dots, swirl, slats), colours, flash/pulse levels, `drop_min_gap_s` (currently 10 s; ~100 blasts/h on the dance-heavy soak playlist).
+5. **Publishing later (repo is private, MIT):** README with a short demo/gif and a "hardware you need" section, hardware-agnostic profile notes for hobbyists, `docs/` cleanup, check `pyproject` dependencies (PyYAML, numpy, rich; dev: librosa, matplotlib, av), Linux/PipeWire-only caveat, remove user-specific notes from the memo if desired.
+6. **Ideas, low priority:** browser GUI on top of the control API; 4/4-only limitation of the bar tracker; kick-path latency (~100 ms before the light delay) cannot be led (options: `audio.block_size` 512, predictive drive scene); tap-tempo; C++ DSP only if CPU ever becomes a problem (it would not fix latency).
+
+### Gotchas worth remembering
+- Latency measurements from click tracks repeat every click period: always confirm with two tempi (150 and 120 BPM); `tools/latency_analyze.py` now warns. The camera's A/V offset was calibrated (~0) with `tools/av_sync_flash.py`.
+- Bluetooth speaker sound is ~254 ms later than wired; use the BT profile (`DMXREACTIVE_CONFIG=config/config_bt.yaml scripts/start_show.sh`) and restart after switching outputs.
+- PicoSpot: speed channel inverted (0 = fast); dimmer is slew-limited (~170 ms full scale) so short flashes use its built-in strobe; tilt 230°, pan 540°; gobo wheel map in §13c-16. Pot Strobe: strobe period linear in DMX value (§6.2); its dimmer is crisp (4 ms).
+- The node outputs at 40 Hz; our render rate is 40 Hz; Art-Net universe is 1 (node default).
+- Photosensitivity: flashing is capped; warn guests at events; the `s` key turns all flashing off.
+- Local-only (git-ignored): `config/config.yaml`, `config/config_bt.yaml`, `support/` media, `support/tracks/`, soak logs.
 
 ### Commands cheat-sheet
-`dmxreactive check-config | sim | test-fixtures | hold | strobe-sweep | list-devices | meter | analyze | record | run` (see README). Tools: `tools/analyze_track.py`, `tools/simulate_show.py`, `tools/click_eval.py`, `tools/strobe_analyze.py`, `tools/jitter_check.py`. Local-only files (git-ignored): `config/config.yaml`, `support/tracks/` (user's test tracks + live recordings), camera clips in `support/`.
+`dmxreactive check-config | preflight [--walk] | run [--scene …] [--flash-path grid|kick] | analyze | meter | list-devices | record | sim | test-fixtures | hold | strobe-sweep | pulse-test | gobo-walk`. `scripts/start_show.sh`, `scripts/install_desktop_entry.sh`, `scripts/setup_dongle.sh`, `scripts/setup_dev.sh`. Tools: `analyze_track.py`, `simulate_show.py`, `bar_check.py`, `click_eval.py`, `pipeline_latency.py`, `latency_analyze.py`, `make_click_track.py`, `av_sync_flash.py`, `strobe_analyze.py`, `video_luma.py`, `soak.py`, `jitter_check.py`.
