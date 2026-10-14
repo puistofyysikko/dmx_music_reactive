@@ -174,3 +174,72 @@ def test_camera_test_derby_writes_raw_motor_value():
     script = build_script(config.patch, "derby-motor", hold_s=2.0, lead_in_s=0.0, values=[200])
     script.update(1.5)  # inside the item, after the slate
     assert derby.dmx_values()[derby.profile.channels["motor"].offset] == 200
+
+
+# -- wear-free modes ---------------------------------------------------------------------
+def mover_ch(ticks, idx):
+    return np.array([tk.dmx["mover1"][idx] for tk in ticks])
+
+
+def test_static_mode_parks_the_head_and_stops_every_motor_and_wheel():
+    feats = breakdown_feats()  # beats, a breakdown, a drop blast and beats again
+    show, _ = new_show(mechanics="static")
+    ticks = [tk for tk in simulate(show, feats) if tk.t > 6]
+    assert len({int(v) for v in mover_ch(ticks, 0)}) == 1  # pan parked
+    assert len({int(v) for v in mover_ch(ticks, 1)}) == 1  # tilt parked
+    assert set(mover_ch(ticks, 5)) == {5}  # colour wheel fixed on white
+    assert set(mover_ch(ticks, 6)) == {8}  # gobo wheel fixed on open (also during the drop)
+    assert set(derby(ticks, 2)) == {1}  # Derby motor on "hold" the whole time
+    assert derby(ticks, 0).max() > 0  # ...but its LEDs still play
+    assert mover_ch(ticks, 7).max() > 100 and show.flashes > 0  # dimmer and flashes still work
+
+
+def test_full_mode_still_moves_for_comparison():
+    show, _ = new_show()
+    ticks = [tk for tk in simulate(show, breakdown_feats()) if tk.t > 6]
+    assert len({int(v) for v in mover_ch(ticks, 0)}) > 5
+    assert derby(ticks, 2).max() >= 140
+
+
+def test_off_mode_keeps_the_head_and_the_derby_dark_even_in_a_drop_blast():
+    show, _ = new_show(mechanics="off")
+    ticks = simulate(show, breakdown_feats())
+    assert mover_ch(ticks, 7).max() == 0 and mover_ch(ticks, 8).max() == 0  # no light, no strobe
+    assert derby(ticks, 0).max() == 0 and set(derby(ticks, 2)) == {1}
+    assert derby(ticks, 3).max() == 0  # not even the white LEDs of the blast
+    assert max(max(wash(ticks, i)) for i in range(4)) > 100  # the LED lights carry on
+    assert np.array([tk.dmx["strobe1"][0] for tk in ticks]).max() > 100
+
+
+def test_mechanics_key_cycles_and_takes_effect_live(clicks150):
+    show, _ = new_show()
+    assert [show.command("m") for _ in range(3)] == [
+        "mechanics: static", "mechanics: off", "mechanics: full"]
+
+    show, _ = new_show()
+
+    def press(i, t, s):
+        if abs(t - 20) < 0.02:
+            s.command("m")
+
+    ticks = simulate(show, clicks150, on_tick=press)
+    late = [tk for tk in ticks if tk.t > 26]
+    assert len({int(v) for v in mover_ch(late, 0)}) == 1 and set(derby(late, 2)) == {1}
+    assert len({int(v) for v in mover_ch([tk for tk in ticks if 12 < tk.t < 19], 0)}) > 3
+
+
+def test_config_rejects_unknown_mechanics(tmp_path):
+    import yaml
+
+    from dmxreactive.dmx.profiles import ProfileError
+
+    raw = yaml.safe_load(EXAMPLE.read_text())
+    raw["show"]["mechanics"] = "gentle"
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(yaml.safe_dump(raw))
+    (tmp_path / "fixtures").symlink_to(ROOT / "config" / "fixtures")
+    with pytest.raises(ProfileError):
+        load_config(cfg)
+    raw["show"]["mechanics"] = "static"
+    cfg.write_text(yaml.safe_dump(raw))
+    assert load_config(cfg).show.mechanics == "static"

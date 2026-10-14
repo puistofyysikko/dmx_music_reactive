@@ -90,6 +90,8 @@ def render(state: LiveState):
         scene.append("   BLACKOUT", style="bold white on red")
     if not show.strobe_enabled:
         scene.append("   FLASHING OFF", style="bold black on yellow")
+    if show.mechanics != "full":
+        scene.append(f"   MECHANICS {show.mechanics.upper()}", style="bold black on cyan")
 
     audio = Table.grid(padding=(0, 2))
     if live_audio:
@@ -142,7 +144,7 @@ def render(state: LiveState):
         events.add_row(Text(f"{et:7.1f}s", style="grey50"), Text(msg))
 
     keys = Text("b blackout   s flashing on/off   a auto   1 beat   2 ambient   3 drive   "
-                "+/- master   Ctrl-C quit" if state.keys_active else "(hotkeys off)",
+                "m mechanics   +/- master   Ctrl-C quit" if state.keys_active else "(hotkeys off)",
                 style="grey50")
     body = Group(scene, Text(""), audio, Text(""), lamps, Text(""), fixtures, Text(""), health,
                  Text(""), events, Text(""), keys)

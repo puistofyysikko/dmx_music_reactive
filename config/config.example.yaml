@@ -51,6 +51,10 @@ show:
   drop_dip: 0.25             # a breakdown = bass energy this far below the recent loud level
   drop_min_gap_s: 10         # at most one blast per this many seconds
   breath_period_s: 7         # ambient scene: moving head brightness breathes at this period
+  mechanics: full            # wear-free: static = head parked (gobo/colour wheel fixed) + Derby motor stopped; off = both dark (key m cycles live)
+  park_pan: 0.5              # static mode: parked position of the moving head (within the pan/tilt limits)
+  park_tilt: 0.5
+  static_colour: white       # static mode: the colour wheel stays here
   breath_depth: 0.6          # ...dipping to (1 - depth) of its level (0 = no breathing)
 
 # Profiles are looked up in config/fixtures/<profile>.json

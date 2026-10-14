@@ -250,6 +250,10 @@ def cmd_run(args) -> int:
     from dmxreactive.live import run_live, status_line
 
     config = load_config(args.config)
+    if args.mechanics:
+        from dataclasses import replace
+
+        config = replace(config, show=replace(config.show, mechanics=args.mechanics))
     if args.flash_path != "both":
         from dataclasses import replace
 
@@ -475,6 +479,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--target", help="override node as host[:port], e.g. 127.0.0.1:16454 for sim")
     p.add_argument("--seconds", type=float, help="stop after this many seconds")
     p.add_argument("--scene", choices=["auto", "beat", "ambient", "drive"], help="force a scene")
+    p.add_argument("--mechanics", choices=["full", "static", "off"],
+                   help="wear-free mode: static = no motor/wheel moves, off = head and Derby dark "
+                        "(default: show.mechanics from the config; key m cycles live)")
     p.add_argument("--no-keys", action="store_true", help="disable hotkeys")
     p.add_argument("--plain", action="store_true", help="plain text status instead of the panel")
     p.add_argument("--flash-path", choices=["both", "grid", "kick"], default="both",

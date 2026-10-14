@@ -39,6 +39,12 @@ DERBY_COLOUR = {
 }
 
 
+# Wear-free modes: "full" = everything moves as designed; "static" = the moving head is parked
+# with its gobo and colour wheels fixed and the Derby's motor stopped (LEDs, dimmer and the
+# built-in strobe still work); "off" = additionally the moving head and the Derby stay dark.
+MECHANICS = ("full", "static", "off")
+
+
 @dataclass(frozen=True)
 class ShowConfig:
     beat_lead_ms: float = 30.0  # fire beat effects this much early (pipeline latency)
@@ -81,6 +87,10 @@ class ShowConfig:
     breath_depth: float = 0.6  # ...dipping to (1 - depth) of its level at the bottom
     derby_motor_ambient: str = "slow"  # Derby beam motor slot (see its profile) per scene
     derby_motor_beat: str = "medium"
+    mechanics: str = "full"  # wear-free modes: full | static (no motors/wheels move) | off
+    park_pan: float = 0.5  # static mode: where the moving head is parked (within pan_limits)
+    park_tilt: float = 0.5
+    static_colour: str = "white"  # static mode: the colour wheel stays here
 
 
 @dataclass
@@ -367,6 +377,7 @@ class Show:
         self._bpm = 0.0
         self._state = {f.name: _MoverState() for f in patch.fixtures}
         self.strobe_enabled = True
+        self.mechanics = self.cfg.mechanics
 
     @property
     def flashes(self) -> int:
@@ -392,6 +403,9 @@ class Show:
             self._beat.strobe_enabled = self._ambient.strobe_enabled = self.strobe_enabled
             self._drive.strobe_enabled = self.strobe_enabled
             return f"strobe light {'on' if self.strobe_enabled else 'OFF'}"
+        if key == "m":
+            self.mechanics = MECHANICS[(MECHANICS.index(self.mechanics) + 1) % len(MECHANICS)]
+            return f"mechanics: {self.mechanics}"
         if key == "a":
             self.override = "auto"
             return "scene: auto"
@@ -656,8 +670,13 @@ class Show:
                 self._apply_wash(fx, st, want, dt)
                 continue
             if fx.group == "effects":
+                if self.mechanics != "full":
+                    want = {**want, "motor": "hold", **({"on": 0.0} if self.mechanics == "off"
+                                                        else {})}
                 self._apply_effect(fx, st, want)
                 continue
+            if fx.group == "movers" and self.mechanics != "full":
+                want = self._wear_free(fx, st, want)
             if "dimmer" in want and fx.has("dimmer"):
                 level = 0.0 if self.blackout else clamp01(float(want["dimmer"])) * self._master_now
                 fx.set("dimmer", level)
@@ -675,7 +694,8 @@ class Show:
                 fx.set("tilt", clamp01(st.tilt.step(tilt, dt)))
             if "speed" in want and fx.has("speed"):
                 fx.set("speed", clamp01(float(want["speed"])))
-            if self._force_white and fx.has("color") and fx.group == "movers":
+            if self._force_white and fx.has("color") and fx.group == "movers" and (
+                    self.mechanics == "full"):
                 st.colour, st.colour_t = "white", self.t  # the blast is white, whatever the hold
             if "gobo" in want and fx.has("gobo"):
                 gobo = str(want["gobo"])
@@ -692,6 +712,20 @@ class Show:
                 if st.colour:
                     fx.set("color", st.colour)
         self._force_white = False
+
+    def _wear_free(self, fx, st: _MoverState, want: dict) -> dict:
+        """Moving head in static/off mode: parked, gobo open, colour fixed; dark when off.
+        The wheels are set directly (no hold time): this is one move at the mode change, not
+        the constant shuffling the hold times protect against."""
+        cfg = self.cfg
+        want = {**want, "pan": cfg.park_pan, "tilt": cfg.park_tilt, "gobo": "open",
+                "color": cfg.static_colour}
+        st.gobo, st.gobo_t = "open", self.t
+        st.colour, st.colour_t = cfg.static_colour, self.t
+        if self.mechanics == "off":
+            want["dimmer"] = 0.0
+            want["strobe_hz"] = 0.0
+        return want
 
     def _apply_wash(self, fx, st: _MoverState, want: dict, dt: float) -> None:
         """RGB bar: colour crossfades (snaps during a drop blast), brightness is immediate."""

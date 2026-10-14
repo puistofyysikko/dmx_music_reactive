@@ -9,7 +9,7 @@ import yaml
 
 from dmxreactive.dmx.artnet import ARTNET_PORT
 from dmxreactive.dmx.profiles import Fixture, FixtureProfile, Patch, ProfileError
-from dmxreactive.engine.show import ShowConfig
+from dmxreactive.engine.show import MECHANICS, ShowConfig
 
 DEFAULT_CONFIG = Path("config/config.yaml")
 EXAMPLE_CONFIG = Path("config/config.example.yaml")
@@ -125,6 +125,10 @@ def load_config(path: str | Path | None = None) -> Config:
         breath_depth=float(sh.get("breath_depth", d.breath_depth)),
         derby_motor_ambient=str(sh.get("derby_motor_ambient", d.derby_motor_ambient)),
         derby_motor_beat=str(sh.get("derby_motor_beat", d.derby_motor_beat)),
+        mechanics=str(sh.get("mechanics", d.mechanics)),
+        park_pan=float(sh.get("park_pan", d.park_pan)),
+        park_tilt=float(sh.get("park_tilt", d.park_tilt)),
+        static_colour=str(sh.get("static_colour", d.static_colour)),
     )
     if not 0.0 < show.max_flash_hz <= 10.0:
         raise ProfileError("show.max_flash_hz must be in (0, 10]")
@@ -136,6 +140,13 @@ def load_config(path: str | Path | None = None) -> Config:
     unknown = sorted(set(show.gobo_palette) - known)
     if unknown:
         raise ProfileError(f"show.gobo_palette: unknown gobo(s) {unknown}")
+    if show.mechanics not in MECHANICS:
+        raise ProfileError(f"show.mechanics must be one of {', '.join(MECHANICS)}")
+    if show.static_colour not in ("white", "red", "orange", "yellow", "green", "blue", "cyan",
+                                  "purple"):
+        raise ProfileError(f"show.static_colour: unknown colour {show.static_colour!r}")
+    if not (0.0 <= show.park_pan <= 1.0 and 0.0 <= show.park_tilt <= 1.0):
+        raise ProfileError("show.park_pan / park_tilt must be between 0 and 1")
     if show.mover_flash_mode not in ("strobe", "dimmer"):
         raise ProfileError("show.mover_flash_mode must be strobe or dimmer")
     if not 0.0 < show.mover_flash_hz <= 10.0:

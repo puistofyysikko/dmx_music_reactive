@@ -739,6 +739,18 @@ Tools: `tools/predrop_features.py` (caches per-block features of tracks) and `to
 - **Counting bars from the breakdown start does not reach the needed ±1 beat:** only 4 % of breakdown lengths are within 1 beat of a multiple of 4 bars. Causes: (1) the detector's start and return times jitter by several beats (0.6 s smoothing, dip/return thresholds, 0.4 s hold; in Falco/Timeless/LSD the bass is already back 1-2 beats before the reported return); (2) tempo octave flips inside one track (LSD reads 105 / 140 / 210 BPM, so "beats" are unreliable); (3) most "breakdowns" are short bass gaps of 1-2 bars, not 8/16-bar phrases. The few clean long ones: Digital Playground 88.5-114.1 s = exactly 64 beats (16 bars), Timeless 24.8-39.1 s ≈ 9 bars (8 + detection lag).
 - **Where this leaves the feature:** not built live. The sample is too small to claim a rule, and there is no ground truth. Needed: the user marks drop times (mm:ss) for ~10 tracks, then candidate predictors (phrase grid from the previous drop, riser/snare-roll signature, bar-aligned breakdown start) can be scored against them. Also worth fixing first: a tempo that stays in one octave through a track.
 
+## 13c-20. Day 6 (2026-10-14): wear-free mode (`show.mechanics`)
+
+Motivation: the PicoSpot (pan/tilt motors, colour and gobo wheels) and the Derby (beam motor) wear out; for near-daily use the user wants a mode without moving parts. Modes (`show.mechanics`, CLI `run --mechanics`, hotkey **m** cycles live, shown in the panel as `MECHANICS STATIC/OFF`):
+- `full`: as before.
+- `static`: moving head **parked** (`park_pan`/`park_tilt`, default centre, still slewed softly and clipped by the pan/tilt limits), **gobo wheel open, colour wheel fixed** (`static_colour`, default white; the wheels are set directly at the mode change, one move, not constantly), also during drop blasts (the blast's white-forcing is skipped). Derby motor on `hold` (DMX 1 = stationary, measured §13c-18). Everything electronic keeps working: head dimmer, breathing, flashes and bursts of its built-in strobe, Derby LEDs/colours/white blast, wash, Pot Strobe.
+- `off`: additionally the moving head (dimmer, strobe) and the Derby stay dark; wash and Pot Strobe carry the show.
+A static head is the beam of a fixed spot; since the lamp is an LED, only the motors and wheels are spared. The quiet alternative with no code, a config without `mover1`/`derby1`, also still works. 5 new tests (parking, wheels, motor hold, off incl. drop blast, key cycling live, config validation). Not yet tried on the real rig.
+
+## 13c-19b. Backlog: pre-drop darkness
+
+Parked by the user (2026-10-14) until there is ground truth: the user collects good sample tracks and marks the drop times; then score predictors (phrase grid from the previous drop, riser/snare signature, bar-aligned breakdown start) and fix the tempo octave flips first. See §13c-19.
+
 ## 13d. Later hardware measurements (camera)
 
 **GoPro Hero 7 (≈ 240 fps)** was used for the first round (see §13c-8; the planned clips below were recorded and analysed) (the Sony a6000 tops out at 1080/60p, confirmed from its specs). Planned clips, in priority order:
