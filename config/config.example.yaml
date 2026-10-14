@@ -63,3 +63,11 @@ fixtures:
     profile: potstrobe100_3ch
     address: 10
     group: strobes
+  - name: wash1               # Eurolite LED PIX-72 RGB bar, display mode 12C2
+    profile: pix72_12c2
+    address: 100
+    group: washes
+  - name: derby1              # Varytec LED Derby ST, display mode 04Ch
+    profile: derbyst_4ch
+    address: 200
+    group: effects

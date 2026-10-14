@@ -95,7 +95,10 @@ def test_no_audio_at_all_is_dark_not_a_crash():
     show, patch = new_show()
     for _ in range(100):
         show.step(None, 0.0, 1 / 30)
-    assert all(f.dmx_values()[f.profile.channels["dimmer"].offset] == 0 for f in patch.fixtures)
+    assert all(f.dmx_values()[f.profile.channels["dimmer"].offset] == 0
+               for f in patch.fixtures if f.has("dimmer"))
+    assert set(patch.get("wash1").dmx_values()) == {0}  # wall wash dark
+    assert patch.get("derby1").dmx_values()[0] == 0  # Derby colour off
 
 
 def test_blackout_key_is_immediate_and_reversible(clicks150):

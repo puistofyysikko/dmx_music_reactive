@@ -1,0 +1,95 @@
+{
+  "id": "eurolite-led-pix-72-rgb-bar-12c2",
+  "manufacturer": "Eurolite",
+  "model": "LED PIX-72 RGB Bar",
+  "mode": "12C2 (display '12C2': 4 independent RGB segments, no dimmer/strobe channels)",
+  "channel_count": 12,
+  "channels": [
+    {
+      "offset": 0,
+      "name": "s1_r",
+      "kind": "continuous",
+      "default": 0.0
+    },
+    {
+      "offset": 1,
+      "name": "s1_g",
+      "kind": "continuous",
+      "default": 0.0
+    },
+    {
+      "offset": 2,
+      "name": "s1_b",
+      "kind": "continuous",
+      "default": 0.0
+    },
+    {
+      "offset": 3,
+      "name": "s2_r",
+      "kind": "continuous",
+      "default": 0.0
+    },
+    {
+      "offset": 4,
+      "name": "s2_g",
+      "kind": "continuous",
+      "default": 0.0
+    },
+    {
+      "offset": 5,
+      "name": "s2_b",
+      "kind": "continuous",
+      "default": 0.0
+    },
+    {
+      "offset": 6,
+      "name": "s3_r",
+      "kind": "continuous",
+      "default": 0.0
+    },
+    {
+      "offset": 7,
+      "name": "s3_g",
+      "kind": "continuous",
+      "default": 0.0
+    },
+    {
+      "offset": 8,
+      "name": "s3_b",
+      "kind": "continuous",
+      "default": 0.0
+    },
+    {
+      "offset": 9,
+      "name": "s4_r",
+      "kind": "continuous",
+      "default": 0.0
+    },
+    {
+      "offset": 10,
+      "name": "s4_g",
+      "kind": "continuous",
+      "default": 0.0
+    },
+    {
+      "offset": 11,
+      "name": "s4_b",
+      "kind": "continuous",
+      "default": 0.0
+    }
+  ],
+  "blackout": {
+    "s1_r": 0.0,
+    "s1_g": 0.0,
+    "s1_b": 0.0,
+    "s2_r": 0.0,
+    "s2_g": 0.0,
+    "s2_b": 0.0,
+    "s3_r": 0.0,
+    "s3_g": 0.0,
+    "s3_b": 0.0,
+    "s4_r": 0.0,
+    "s4_g": 0.0,
+    "s4_b": 0.0
+  }
+}

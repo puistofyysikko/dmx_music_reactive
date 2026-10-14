@@ -13,3 +13,4 @@ support/*.wav
 config/config_*.yaml
 support/*.png
 dmx_music_reactive_project_plan.md
+support/*.pdf

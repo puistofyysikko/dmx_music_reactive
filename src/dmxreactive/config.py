@@ -123,6 +123,8 @@ def load_config(path: str | Path | None = None) -> Config:
         drop_min_gap_s=float(sh.get("drop_min_gap_s", d.drop_min_gap_s)),
         breath_period_s=float(sh.get("breath_period_s", d.breath_period_s)),
         breath_depth=float(sh.get("breath_depth", d.breath_depth)),
+        derby_motor_ambient=str(sh.get("derby_motor_ambient", d.derby_motor_ambient)),
+        derby_motor_beat=str(sh.get("derby_motor_beat", d.derby_motor_beat)),
     )
     if not 0.0 < show.max_flash_hz <= 10.0:
         raise ProfileError("show.max_flash_hz must be in (0, 10]")
@@ -144,6 +146,9 @@ def load_config(path: str | Path | None = None) -> Config:
         raise ProfileError("show.drop_duration_s must be between 0.2 and 4 seconds")
     if not 0.0 <= show.breath_depth <= 1.0 or show.breath_period_s < 1.0:
         raise ProfileError("show.breath_depth must be 0..1 and breath_period_s >= 1")
+    motors = {"hold", "slow", "medium", "fast"}
+    if {show.derby_motor_ambient, show.derby_motor_beat} - motors:
+        raise ProfileError(f"show.derby_motor_*: must be one of {sorted(motors)}")
     if show.scene not in ("auto", "beat", "ambient", "drive"):
         raise ProfileError("show.scene must be auto, beat, ambient or drive")
     return Config(node=node, rate_hz=rate, patch=Patch(fixtures), audio=audio, show=show)

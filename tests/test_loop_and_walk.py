@@ -14,6 +14,8 @@ EXAMPLE = str(Path(__file__).parent.parent / "config" / "config.example.yaml")
 
 
 def level(fixture, channel):
+    if channel not in fixture.profile.channels:
+        return 0
     return fixture.dmx_values()[fixture.profile.channels[channel].offset]
 
 
@@ -67,11 +69,16 @@ def test_walk_hits_every_function_and_ends_dark():
                 peak[name] = max(peak[name], level(f, name))
         t += 1 / 30
     labels = " | ".join(seen)
-    for word in ("dimmer", "pan", "tilt", "colour red", "colour purple", "strobe 3 Hz"):
+    for word in ("dimmer", "pan", "tilt", "colour red", "colour purple", "strobe 3 Hz",
+                 "segment 1 white", "segment 4 white", "all segments blue", "motor fast",
+                 "white LEDs on", "colour red_green_blue"):
         assert word in labels
     assert "Hz unknown" not in labels  # both fixtures now have a measured Hz mapping
     assert peak["dimmer"] > 100 and peak["strobe"] > 0
     assert all(level(f, n) == 0 for f in cfg.patch.fixtures for n in peak)
+    wash, derby = cfg.patch.get("wash1"), cfg.patch.get("derby1")
+    assert set(wash.dmx_values()) == {0}  # every segment ends dark
+    assert derby.dmx_values() == [0, 0, 1, 0]  # colour off, strobe channel 0, motor hold, white off
 
 
 def test_cli_check_config_and_bad_config(capsys):

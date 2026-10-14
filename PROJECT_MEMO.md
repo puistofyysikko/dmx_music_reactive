@@ -55,6 +55,9 @@ These are the points where the first draft needs changing before we write code.
 | Art-Net node | Eurolite **DXT PoE Art-Net Node I** (1 universe, 512 ch) | 1 | Powered by **PoE (802.3af, 48 V) or 5 V USB-C** – see §3.3 |
 | Moving head | Fun Generation **PicoSpot 20 LED** (12 W white LED, 540° pan / 230° tilt, 35 W, 3-pin XLR) | 1 | 5/9/11-ch modes; 8 colours + 8 gobos |
 | Strobe | Fun Generation **LED Pot Strobe 100** (126 white SMD LEDs, 38 W, 3-pin XLR) | 1 | 1/3-ch modes |
+| Wall wash | Eurolite **LED PIX-72 RGB Bar** (72 SMD 5050 RGB, 4 segments of 18 LEDs, 15 W, 3-pin XLR, 120°) | 1 | Added 2026-10-14. Display mode `12C2`: 4 independent RGB segments, no dimmer/strobe channels (we dim in software) |
+| Beam effect | Varytec **LED Derby ST** (4 × 3 W RGBW + 16 white LEDs, rotating beams, 3-pin XLR) | 1 | Added 2026-10-14. Display mode `04Ch`; **no dimmer**: colour slots only, on/off |
+| Fog machine | Stairville **AF-40** | 1 | Standalone, manual operation, **not DMX-controlled** (documentation only, see the event checklist) |
 | DMX cable 10 m + 5 m | 110 Ω DMX cable, 3-pin XLR | 1+1 | Not microphone cable |
 | 120 Ω terminator | XLR 3-pin | 1 | On the last fixture's DMX OUT |
 | Ethernet cable | Cat5e+ | 1 | Dongle ↔ node (direct, or via PoE injector/switch) |
@@ -285,15 +288,44 @@ Least-squares fit over all 10 points: `period_ms = 1464.1 − 5.535·DMX` (resid
 
 **Strobe behaviour assumption for the code (superseded by the measurement above for the Pot Strobe):** treat channel 3 as linear in frequency; the safety limiter (§9) converts the allowed max Hz to a DMX cap after we measure it (phone slow-mo / counting flashes at 3–4 values). Alternatively, **drive flashes ourselves** with short dimmer pulses on ch 1 at a controlled rate (exact timing locked to detected beats), which avoids relying on the fixture's own strobe oscillator at all. Plan to support both; decide after a hardware test.
 
-### 6.3 Patch summary
+### 6.4 Eurolite LED PIX-72 RGB Bar – **chosen mode: `12C2` (12-2-channel), start address 100** (occupies 100–111)
+
+From the user's copy of the manual (`support/User_Manual_45263_1.pdf`, 28 pages, p. 25-26; not committed). Modes: 3, 5, 6, `12C1`, `12C2`; the display menu `Chnd` selects the mode, then `Addr` the start address. The bar has 4 segments (1–4, left to right in the manual's picture), each 18 LEDs.
+
+| Mode | Channels |
+|------|----------|
+| 3 | R, G, B (whole bar) |
+| 5 | R, G, B, master dimmer, ch5: 1–5 sound mode, 11–255 strobe |
+| 6 | master dimmer, strobe, R, G, B, auto programs (16–255) |
+| `12C1` | two halves (segments 1+2, 3+4): dimmer, strobe, R, G, B, auto programs each |
+| **`12C2`** | **R, G, B for segment 1, 2, 3, 4 (ch 1–12), nothing else** |
+
+Why `12C2`: independent segments for chases; no hardware dimmer/strobe to fight with (brightness is scaled in software, the PWM frequency is 13 kHz so there is no visible flicker); no strobe channel to misuse (flash safety stays in one place).
+
+### 6.5 Varytec LED Derby ST – **chosen mode: 4-channel (`04Ch`), start address 200** (occupies 200–203)
+
+From the Thomann manual (390843, section 7.5). The menu item `dMH` selects `01Ch`/`04Ch` and the address (`dxxx`).
+
+| Ch | Function |
+|----|----------|
+| 1 | Derby colour combination by range: 6–20 red, 21–35 green, 36–50 blue, 51–65 white, 66–80 R+G, 81–95 R+B, 96–110 R+W, 111–125 G+B, 126–140 G+W, 141–155 B+W, 156–170 R+G+B, 171–185 R+G+W, 186–200 G+B+W, 201–215 all four, 216–230 colour change 1, 231–255 colour change 2; 0–5 off |
+| 2 | 0–5 none, 6–255 strobe of the coloured LEDs, increasing speed (**never used: fixed 0 in the profile**) |
+| 3 | beam motor: 0 none, 1–127 fixed position (indexing), 128–255 rotation (speed mapping unmeasured: profile slots hold 1 / slow 140 / medium 190 / fast 255 are guesses to be checked) |
+| 4 | white-LED strobe patterns 1–17 (10–179, **unused**), 0–9 none, **180–255 white at full brightness without strobe** (`full` = 200) |
+
+There is no dimmer: the Derby is on/off and colour-slot only.
+
+### 6.6 Patch summary
 
 | Universe 0 | Fixture | Mode | Channels |
 |-----------|---------|------|----------|
 | 1–9 | PicoSpot 20 LED | 9-ch | pan, tilt, pan-fine, tilt-fine, speed, colour, gobo, dimmer, strobe |
 | 10–12 | LED Pot Strobe 100 | 3-ch | dimmer, mode (=0), strobe |
 | 13–99 | free (movers block) | | |
-| 100–199 | reserved: washes/PARs | | |
-| 200–299 | reserved: effects (derby) | | |
+| 100–111 | Eurolite LED PIX-72 RGB Bar (`wash1`, group `washes`) | 12C2 | s1_r, s1_g, s1_b … s4_r, s4_g, s4_b (4 segments) |
+| 112–199 | free (washes/PARs block) | | |
+| 200–203 | Varytec LED Derby ST (`derby1`, group `effects`) | 4-ch | colour, colour strobe (fixed 0), motor, white |
+| 204–299 | free (effects block) | | |
 | 300+ | reserved: atmosphere (haze) | | |
 
 (Address blocks from the original plan are kept as the *expansion convention*; the two current fixtures sit at the start for simplicity.)
@@ -678,6 +710,20 @@ User feedback: bar_check tracks all sound solid, no slipping; downbeat looks rig
 
 Implementation: `gobo` is now a **select channel** in `picospot20_9ch.json` (default `open`); the show picks gobos from `show.gobo_palette` (default open, dots, star, swirl, petals, mosaic; `ring` and `slats` available), **changing on bar boundaries** — every 4 bars when the bar position is trusted (else every 32 beats; drive scene ≈ 16 s; ambient scene one change per ~45 s), never faster than `gobo_hold_s` (5 s, the wheel is mechanical), always **open during the drop effect**; `gobo_mode: off` keeps it open; the status panel shows the active non-open gobo. 4 new tests, **119 pass**.
 
+## 13c-17. Day 6 (2026-10-14): wall wash, Derby and fog machine arrive
+
+Hardware: Eurolite **LED PIX-72 RGB Bar**, Varytec **LED Derby ST**, Stairville **AF-40** fog machine (standalone, manual; needed because the Derby's and PicoSpot's beams are invisible without particles in the air). Channel tables: §6.4, §6.5 (PIX-72 from the user's PDF copy, Derby from the Thomann manual). Git housekeeping: the memo hand-off commit had stayed on `docs/status-handoff` (never merged), so it was cherry-picked onto `update/add_new_lights_and_features`.
+
+**Built (software only, untested on the real rig):**
+- Profiles `config/fixtures/pix72_12c2.json` (12 continuous channels `s1_r` … `s4_b`) and `derbyst_4ch.json` (select channels `color`, `motor`, `white`; `color_strobe` is a *fixed* 0 and the white strobe patterns are not reachable: the Derby can never flash by accident). Patch: `wash1` at 100 (group `washes`), `derby1` at 200 (group `effects`), following the address convention in §6.6; also in the user's local `config.yaml` / `config_bt.yaml`.
+- Scene roles (`engine/show.py`): **wash**: ambient = slow colour drift (20 s per palette step, opposite the mover's colour), brightness breathing as a wave along the four segments; beat/drive = bass-following floor, a one-segment chase per flash event (so it inherits the shared flash cap), **the whole bar on the ONE**, colour per bar; **drop blast** = snaps to white; **dark drop** = dark with the rest, then the white pop. Colour changes crossfade (τ 0.25 s), brightness does not. **Derby**: on while the bass is there (hysteresis around `flash_gate`, so it goes dark in breakdowns by itself), colour per bar with `colour_hold_s`, beam motor slot per scene (`show.derby_motor_ambient: slow`, `derby_motor_beat: medium`); drop blast = white + the white LEDs at full; dark drop = off. Master brightness scales the wash only (the Derby cannot dim, it is on/off with the master/silence/blackout).
+- Walker: segments one at a time (checks the physical order), whole-bar R/G/B, Derby motor slots and white LEDs.
+- 9 new tests in `tests/test_new_lights.py` (profiles, chase, silence/blackout, breakdown, white blast, dark drop, flash cap, Derby strobe channel stays 0), walker test extended.
+
+**Open (needs the real rig):** set the PIX-72 to `12C2` / `Addr 100` and the Derby to `04Ch` / `A200`; `preflight --walk`; find out what the motor values 128–255 actually do (speed direction/mapping) and fix the `slow/medium/fast` slots in the profile; judge brightness (the 4 segments on a wall: `master`), colours (RGB mix on camera vs eye), dark-drop timing with all lights.
+
+**Fog machine AF-40:** documentation only (checklist). It is not on DMX and not under software control.
+
 ## 13d. Later hardware measurements (camera)
 
 **GoPro Hero 7 (≈ 240 fps)** was used for the first round (see §13c-8; the planned clips below were recorded and analysed) (the Sony a6000 tops out at 1080/60p, confirmed from its specs). Planned clips, in priority order:
@@ -698,7 +744,7 @@ Skipped on purpose: Pot Strobe above 10 Hz (the cap stays at 10 Hz).
 - Strobe mappings measured with camera (§6.2); safety caps in Hz (`safe_max_hz`).
 - Hardware verified 2026-10-02: node, both fixtures, channel walk, strobe rates. Still open: PicoSpot tilt range (200° vs 230°), gobo list, 10-minute jitter soak on the real network.
 
-## 14. Status and hand-off (updated 2026-10-05)
+## 14. Status and hand-off (updated 2026-10-14)
 
 **State:** v0.1.0 is merged into `main` (squash-merged from `create/foundation`; the user set up their own git identity and keeps their real email private). Everything below is built, committed, tested (119 tests) and verified on the real rig where hardware is involved.
 
@@ -713,8 +759,11 @@ Skipped on purpose: Pot Strobe above 10 Hz (the cap stays at 10 Hz).
 | Timing: GoPro-calibrated (wired: `light_delay_ms` 60, `beat_lead_ms` −30; Bluetooth profile `config/config_bt.yaml`: delay 315) | done (§13c-9…13) |
 | Soak: 3 h silent soak (virtual sink + fake node) | PASS (§13c-11) |
 
+### Update 2026-10-14
+The wall wash (PIX-72) and the Derby are in the software (profiles, patch, scene roles, walker, tests: §13c-17), **not yet run on the real rig**; the fog machine is manual and documented in the checklist. Item 1 below is therefore done in code; what remains of it is the hardware bring-up and taste tuning.
+
 ### Waiting / next
-1. **Remaining lights (user is purchasing, an ambient/wall wash that illuminates the whole wall).** When they arrive: get model + manual (DMX modes and channel table), add `config/fixtures/<model>.json` (see the PicoSpot/Pot Strobe profiles for kinds `continuous`/`select`/`rate`/`fixed`), a patch entry with a free address block (convention: washes 100–199) and a new group (e.g. `washes`), then give the group roles in the scenes (`engine/show.py`): ambient = slow colour wash/breathing, beat = bass-following brightness with the one as accent, drop blast = white, **dark drop = wash also goes dark (the user wants all lights but the strobe to go dark)**, drive = fast colour steps. Check addresses against the other fixtures (`dmxreactive check-config`), run `preflight --walk`, and extend tests (`tests/test_show.py` helpers `new_show`, `mover`, `strobe_series`).
+1. **(Done in code 2026-10-14, see §13c-17; hardware bring-up pending.) Remaining lights (user is purchasing, an ambient/wall wash that illuminates the whole wall).** When they arrive: get model + manual (DMX modes and channel table), add `config/fixtures/<model>.json` (see the PicoSpot/Pot Strobe profiles for kinds `continuous`/`select`/`rate`/`fixed`), a patch entry with a free address block (convention: washes 100–199) and a new group (e.g. `washes`), then give the group roles in the scenes (`engine/show.py`): ambient = slow colour wash/breathing, beat = bass-following brightness with the one as accent, drop blast = white, **dark drop = wash also goes dark (the user wants all lights but the strobe to go dark)**, drive = fast colour steps. Check addresses against the other fixtures (`dmxreactive check-config`), run `preflight --walk`, and extend tests (`tests/test_show.py` helpers `new_show`, `mover`, `strobe_series`).
 2. **Pre-drop kill (agreed, not built):** darkness for the last beat (or two) before a predicted drop. Needs a *prediction*: breakdown length in bars (typically 8 or 16 bars; use the bar counter `bar_beat`/`bar_start` and the breakdown start from the drop detector's dip logic), then blackout on the last beat of the last bar and the drop blast on the one. Build and evaluate **offline on the user's tracks first** (how often the predicted drop time is within ±1 beat), report honestly; a wrong prediction costs only one needless dark beat; ration like the dark drop.
 3. **Live test of the dark drop** with the wall lights (user will judge `drop_blackout_s` 1.5 s and the 90 s ration).
 4. **Taste tuning** of gobo palette (`show.gobo_palette`; available: open, ring, petals, star, mosaic, dots, swirl, slats), colours, flash/pulse levels, `drop_min_gap_s` (currently 10 s; ~100 blasts/h on the dance-heavy soak playlist).

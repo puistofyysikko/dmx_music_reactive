@@ -108,7 +108,7 @@ def test_profile_validation():
 def test_example_config_loads():
     cfg = load_config(CONFIG_DIR / "config.example.yaml")
     assert cfg.node.host == "192.168.1.20" and cfg.node.port_address == 1
-    assert [f.name for f in cfg.patch.fixtures] == ["mover1", "strobe1"]
+    assert [f.name for f in cfg.patch.fixtures] == ["mover1", "strobe1", "wash1", "derby1"]
 
 
 def test_set_raw_is_capped_and_zero_is_off(strobe):

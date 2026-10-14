@@ -1,0 +1,21 @@
+{
+  "id": "varytec-led-derby-st-4ch",
+  "manufacturer": "Varytec",
+  "model": "LED Derby ST",
+  "mode": "4ch (display '04Ch')",
+  "channel_count": 4,
+  "channels": [
+    { "offset": 0, "name": "color", "kind": "select", "default": "off",
+      "slots": { "off": 0, "red": 13, "green": 28, "blue": 43, "white": 58,
+                 "red_green": 73, "red_blue": 88, "red_white": 103, "green_blue": 118,
+                 "green_white": 133, "blue_white": 148, "red_green_blue": 163,
+                 "red_green_white": 178, "green_blue_white": 193, "all": 208,
+                 "change1": 223, "change2": 243 } },
+    { "offset": 1, "name": "color_strobe", "kind": "fixed", "value": 0 },
+    { "offset": 2, "name": "motor", "kind": "select", "default": "hold",
+      "slots": { "hold": 1, "slow": 140, "medium": 190, "fast": 255 } },
+    { "offset": 3, "name": "white", "kind": "select", "default": "off",
+      "slots": { "off": 0, "full": 200 } }
+  ],
+  "blackout": { "color": "off", "motor": "hold", "white": "off" }
+}

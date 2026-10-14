@@ -26,6 +26,17 @@ log = logging.getLogger(__name__)
 
 STALE_S = 1.5  # features older than this are treated as "no audio"
 PALETTE = ("red", "orange", "yellow", "green", "cyan", "blue", "purple", "white")
+# Wall wash (RGB bar): palette colour -> RGB at full level
+WASH_RGB = {
+    "red": (1.0, 0.0, 0.0), "orange": (1.0, 0.25, 0.0), "yellow": (1.0, 0.7, 0.0),
+    "green": (0.0, 1.0, 0.0), "cyan": (0.0, 0.8, 1.0), "blue": (0.0, 0.0, 1.0),
+    "purple": (0.6, 0.0, 1.0), "white": (1.0, 1.0, 1.0),
+}
+# Derby effect (colour combinations are fixed slots, no dimming): palette colour -> slot
+DERBY_COLOUR = {
+    "red": "red", "orange": "red_green", "yellow": "red_green", "green": "green",
+    "cyan": "green_blue", "blue": "blue", "purple": "red_blue", "white": "white",
+}
 
 
 @dataclass(frozen=True)
@@ -68,6 +79,8 @@ class ShowConfig:
     drop_min_gap_s: float = 10.0  # at most one drop blast per this many seconds
     breath_period_s: float = 7.0  # ambient scene: the moving head's brightness breathes at this
     breath_depth: float = 0.6  # ...dipping to (1 - depth) of its level at the bottom
+    derby_motor_ambient: str = "slow"  # Derby beam motor slot (see its profile) per scene
+    derby_motor_beat: str = "medium"
 
 
 @dataclass
@@ -119,9 +132,13 @@ class BeatScene:
         self.name = "drive" if kick_driven else "beat"
         self.movers = patch.group("movers")
         self.strobes = patch.group("strobes")
+        self.washes = patch.group("washes")
+        self.effects = patch.group("effects")
         self.cfg = cfg
         self._limiter = limiter
         self._flash = Decay(cfg.flash_decay_ms / 1000.0)
+        self._seg = [Decay(0.3) for _ in range(4)]  # wash segment pulses (chase)
+        self._derby_on = False
         self._accent = Decay(0.25)
         self._mover_flash = HoldDecay(cfg.mover_flash_hold_ms / 1000.0, 0.12)
         self._burst_until = -1.0
@@ -176,6 +193,11 @@ class BeatScene:
         flash = self._flash.step(c.dt)
         if fired_flash:
             self._accent.trigger(max(0.6, clamp01(energy / 0.6)))
+            if self._bar_known and self._bar_one:
+                for d in self._seg:
+                    d.trigger(1.0)  # the ONE lights the whole bar
+            else:
+                self._seg[self._events % 4].trigger(0.9)  # otherwise one segment per beat
         accent = self._accent.step(c.dt)
         mover_flash = self._mover_flash.step(c.dt)
         burst = c.t < self._burst_until
@@ -199,6 +221,20 @@ class BeatScene:
                 "gobo": pick_gobo(cfg, (c.bar_no // 4) if self._bar_known else int(pos // 32), i),
                 "strobe_hz": cfg.mover_flash_hz if burst else 0.0,
             }
+        # wall wash: a calm colour per bar (opposite the mover's), bass-following floor, and a
+        # chase that steps one segment per flash event (the whole bar on the ONE)
+        seg = [d.step(c.dt) for d in self._seg]
+        floor = 0.1 + 0.3 * clamp01(c.level)
+        for f in self.washes:
+            out[f.name] = {"colour": PALETTE[(bar + 3) % len(PALETTE)],
+                           **{f"seg{i}": max(floor, 0.9 * seg[i]) for i in range(4)}}
+        # Derby: on while the bass is there (dark in breakdowns), colour per bar
+        gate = cfg.drive_flash_gate if self.kick_driven else cfg.flash_gate
+        self._derby_on = energy >= (gate - 0.1 if self._derby_on else gate)
+        for f in self.effects:
+            out[f.name] = {"on": 1.0 if self._derby_on else 0.0,
+                           "colour": PALETTE[(bar + 2) % len(PALETTE)],
+                           "motor": cfg.derby_motor_beat}
         return out
 
 
@@ -211,6 +247,9 @@ class AmbientScene:
     def __init__(self, patch: Patch, cfg: ShowConfig, limiter: FlashLimiter) -> None:
         self.movers = patch.group("movers")
         self.strobes = patch.group("strobes")
+        self.washes = patch.group("washes")
+        self.effects = patch.group("effects")
+        self._derby_on = False
         self.cfg = cfg
         self._limiter = limiter  # the shared hard cap
         self._own = FlashLimiter(cfg.ambient_flash_hz)
@@ -249,6 +288,16 @@ class AmbientScene:
                 "color": PALETTE[(int(c.t // 20) + i) % len(PALETTE)],
                 "gobo": pick_gobo(cfg, int(c.t // 45), i),
             }
+        # wall wash: slow colour drift, brightness breathing as a wave along the bar
+        for f in self.washes:
+            wave = {f"seg{i}": 0.7 * base * (1.0 - cfg.breath_depth * (1.0 - (0.5 + 0.5 * math.cos(
+                2 * math.pi * (c.t / cfg.breath_period_s - 0.25 * i))))) for i in range(4)}
+            out[f.name] = {"colour": PALETTE[(int(c.t // 20) + 3) % len(PALETTE)], **wave}
+        self._derby_on = c.level >= (0.1 if self._derby_on else 0.15)
+        for f in self.effects:
+            out[f.name] = {"on": 1.0 if self._derby_on else 0.0,
+                           "colour": PALETTE[(int(c.t // 20) + 2) % len(PALETTE)],
+                           "motor": cfg.derby_motor_ambient}
         return out
 
 
@@ -260,6 +309,7 @@ class _MoverState:
     colour_t: float = -1e9
     gobo: str = "open"
     gobo_t: float = -1e9
+    rgb: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])  # wash colour (smoothed)
 
 
 class Show:
@@ -570,6 +620,19 @@ class Show:
                 # blackout style: a clean stutter in the dark, no scene flashes mixed in
                 want["dimmer"] = strobe_level if self._blast_style == "blackout" and (
                     forced_dark) else max(scene, strobe_level)
+            elif fx.group == "washes":
+                if forced_dark:
+                    for i in range(4):
+                        want[f"seg{i}"] = 0.0
+                else:
+                    want["colour"] = "white"
+                    for i in range(4):
+                        want[f"seg{i}"] = max(float(want.get(f"seg{i}", 0.0)), mover_level)
+            elif fx.group == "effects":
+                if forced_dark:
+                    want["on"] = 0.0
+                else:
+                    want.update({"on": 1.0, "colour": "white", "white": 1.0})
             elif fx.group == "movers":
                 if forced_dark:
                     want["dimmer"] = 0.0
@@ -589,6 +652,12 @@ class Show:
         for fx in self.patch.fixtures:
             st = self._state[fx.name]
             want = intents.get(fx.name, {})
+            if fx.group == "washes":
+                self._apply_wash(fx, st, want, dt)
+                continue
+            if fx.group == "effects":
+                self._apply_effect(fx, st, want)
+                continue
             if "dimmer" in want and fx.has("dimmer"):
                 level = 0.0 if self.blackout else clamp01(float(want["dimmer"])) * self._master_now
                 fx.set("dimmer", level)
@@ -623,6 +692,35 @@ class Show:
                 if st.colour:
                     fx.set("color", st.colour)
         self._force_white = False
+
+    def _apply_wash(self, fx, st: _MoverState, want: dict, dt: float) -> None:
+        """RGB bar: colour crossfades (snaps during a drop blast), brightness is immediate."""
+        target = WASH_RGB.get(str(want.get("colour", "white")), WASH_RGB["white"])
+        tau = 0.02 if self._blast_t0 is not None else 0.25
+        st.rgb = [smooth_toward(a, b, dt, tau) for a, b in zip(st.rgb, target, strict=True)]
+        for i in range(4):
+            level = 0.0 if self.blackout else clamp01(float(want.get(f"seg{i}", 0.0)))
+            level *= self._master_now
+            for ch, v in zip("rgb", st.rgb, strict=True):
+                fx.set(f"s{i + 1}_{ch}", clamp01(v * level))
+
+    def _apply_effect(self, fx, st: _MoverState, want: dict) -> None:
+        """Derby: on/off only (no dimmer): colour slot with a hold time, beam motor, white LEDs.
+        The colour-strobe channel is a fixed 0 in the profile and the white strobe is unused."""
+        on = (float(want.get("on", 0.0)) > 0.5 and not self.blackout
+              and self._master_now > 0.05)
+        if not on:
+            fx.set("color", "off")
+            fx.set("motor", "hold")
+            fx.set("white", "off")
+            return
+        colour = str(want.get("colour", "white"))
+        if colour != st.colour and (self.t - st.colour_t >= self.cfg.colour_hold_s
+                                    or colour == "white" and self._blast_t0 is not None):
+            st.colour, st.colour_t = colour, self.t
+        fx.set("color", DERBY_COLOUR.get(st.colour or colour, "white"))
+        fx.set("motor", str(want.get("motor", "slow")))
+        fx.set("white", "full" if want.get("white") else "off")
 
 
 def _clip(x: float, lo: float, hi: float) -> float:
