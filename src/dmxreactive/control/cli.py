@@ -374,6 +374,30 @@ def cmd_gobo_walk(args) -> int:
     return 0
 
 
+def cmd_camera_test(args) -> int:
+    """Play a slow, slated test program for the new fixtures so it can be filmed and measured."""
+    from dmxreactive.control.camera_tests import build_script
+
+    config = load_config(args.config)
+    host, _, port = (args.target or "").partition(":")
+    values = [int(v) for v in args.values.split(",")] if args.values else None
+    t0 = time.perf_counter()
+    try:
+        script = build_script(config.patch, args.program, wash_name=args.wash,
+                              derby_name=args.derby, hold_s=args.hold, lead_in_s=args.lead_in,
+                              values=values)
+    except (KeyError, ValueError) as exc:
+        raise ProfileError(str(exc)) from exc
+    script._announce = lambda label: print(f"[{time.perf_counter() - t0:6.1f}s] {label}")
+    print(f"Camera test '{args.program}': {script.total:.0f} s. Each item is preceded by a white "
+          f"wash flash (slate). GoPro: 240 fps, fixed exposure; Ctrl-C = blackout.")
+    t0 = time.perf_counter()
+    run_output(config, script.update, duration_s=script.total + 0.2, host=host or None,
+               port=int(port) if port else None)
+    print("Done, blackout sent")
+    return 0
+
+
 def cmd_hold(args) -> int:
     """Hold fixed channel values on one fixture (bring-up/debugging), then blackout."""
     config = load_config(args.config)
@@ -497,6 +521,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--dimmer", type=float, default=0.8)
     p.add_argument("--target")
     p.set_defaults(func=cmd_gobo_walk)
+
+    p = sub.add_parser("camera-test", help="slated test program to film new fixtures (GoPro)")
+    p.add_argument("program", choices=["derby-motor", "wash-ramp", "wash-pulse"])
+    p.add_argument("--wash", help="wash fixture for slates/ramps (default: first in group washes)")
+    p.add_argument("--derby", help="Derby fixture (default: first in group effects)")
+    p.add_argument("--hold", type=float, default=8.0, help="seconds per item")
+    p.add_argument("--lead-in", type=float, default=5.0)
+    p.add_argument("--values", help="derby-motor: raw DMX values, e.g. 128,160,255")
+    p.add_argument("--target")
+    p.set_defaults(func=cmd_camera_test)
 
     p = sub.add_parser("hold", help="hold channel values on one fixture, e.g. hold mover1 pan=0.2")
     p.add_argument("fixture")

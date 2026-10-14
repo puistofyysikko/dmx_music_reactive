@@ -147,3 +147,30 @@ def test_flash_cap_is_unchanged_by_the_new_lights(clicks150):
     rising = [ticks[i].t for i in range(1, len(series)) if series[i] >= 120 > series[i - 1]]
     gaps = np.diff(rising)
     assert (gaps >= 1 / 8.0 - 1e-6).all()
+
+
+def test_camera_test_programs_build_and_run():
+    from dmxreactive.control.camera_tests import PROGRAMS, build_script
+
+    config = load_config(EXAMPLE)
+    for program in PROGRAMS:
+        script = build_script(config.patch, program, hold_s=1.0, lead_in_s=0.0)
+        assert script.total > 5
+        lines = []
+        script._announce = lines.append
+        t = 0.0
+        while t < script.total:
+            script.update(t)
+            t += 0.025
+        assert any("slate" in line for line in lines)
+        assert all(sum(f.dmx_values()) >= 0 for f in config.patch.fixtures)
+
+
+def test_camera_test_derby_writes_raw_motor_value():
+    from dmxreactive.control.camera_tests import build_script
+
+    config = load_config(EXAMPLE)
+    derby = config.patch.get("derby1")
+    script = build_script(config.patch, "derby-motor", hold_s=2.0, lead_in_s=0.0, values=[200])
+    script.update(1.5)  # inside the item, after the slate
+    assert derby.dmx_values()[derby.profile.channels["motor"].offset] == 200
