@@ -724,6 +724,14 @@ Hardware: Eurolite **LED PIX-72 RGB Bar**, Varytec **LED Derby ST**, Stairville 
 
 **Fog machine AF-40:** documentation only (checklist). It is not on DMX and not under software control.
 
+## 13c-18. Day 6 (2026-10-14): first GoPro measurements of the new lights (`camera-test`)
+
+New command `dmxreactive camera-test derby-motor|wash-ramp|wash-pulse` (`control/camera_tests.py`): each item is preceded by a slate (wash white 0.3 s, dark 0.7 s), items are found in the clip by those flashes. Clips (GoPro 240 fps, `support/`): GX014458 derby-motor, GX014459 wash-ramp, GX014460 wash-pulse. The clips' own slate times match the script (item spacing exact), so cutting by slate works.
+
+- **Wash pulses (GX014460):** commanded 25/50/100/200/400 ms come out as 25/50/100/200/400 ms (half-max width, ±4 ms = one camera frame); even the single 25 ms frame reaches 100 % peak; rise/fall within one camera frame. The wash is effectively an instant on/off for our flash purposes.
+- **Wash ramp (GX014459):** smooth and monotone from 2 % up (white luma over dark: 10, 14, 19, 31, 47, 62, 82, 99 at 2, 5, 10, 20, 35, 50, 75, 100 %), no flicker (std < 0.6), exposure stable. Luma is gamma-encoded, so no linearity claim. **Colour balance cannot be judged from these clips: the camera's white balance was off** (the white slate shows as RGB ≈ 0/160/255, i.e. a strong blue cast), so set the GoPro white balance to ≈ 5500 K / native before any colour work, and analyse RGB instead of luma.
+- **Derby motor (GX014458):** DMX 1 and 32 = stationary (frame difference = sensor noise); 64 and 96 = barely creeping (drift only visible over seconds); **from 128 the pattern really moves and speeds up monotonically to 255** (decorrelation time of the image: 0.65 s at 128, 0.33 at 144, 0.20 at 160, 0.12 at 176, ~0.07 s at 192-240, 0.05 s at 255, so ≈ 13x faster at 255 than at 128; the fast end is limited by the analysis' 17 ms sampling). Profile slots (slow 140 / medium 190 / fast 255) therefore are roughly 1 : 4 : 8 in speed; `hold` (1) truly stops it, which is what the wear-free mode needs. The absolute rotation period was not obtained (the pattern does not repeat cleanly in an 8 s window). The Derby's "white" colour looked blue only through the camera's white balance (bright spot cores read RGB ≈ 200/248/254).
+
 ## 13d. Later hardware measurements (camera)
 
 **GoPro Hero 7 (≈ 240 fps)** was used for the first round (see §13c-8; the planned clips below were recorded and analysed) (the Sony a6000 tops out at 1080/60p, confirmed from its specs). Planned clips, in priority order:
