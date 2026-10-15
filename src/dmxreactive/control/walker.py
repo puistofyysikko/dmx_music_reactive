@@ -38,6 +38,29 @@ def fixture_steps(f: Fixture, step_s: float) -> list[Step]:
             steps.append(Step(f"{f.name}: colour {slot}", step_s / 2,
                               lambda _p, s=slot: f.set("color", s)))
         steps[-1].finish = lambda: f.set("color", "white")
+    if f.has("s1_r"):  # RGB segment bar: each segment alone (checks order), then whole-bar colours
+        segs = [n for n in range(1, 9) if f.has(f"s{n}_r")]
+
+        def seg_rgb(n: int, rgb: tuple[float, float, float]) -> None:
+            for ch, v in zip("rgb", rgb, strict=True):
+                f.set(f"s{n}_{ch}", v)
+
+        for n in segs:
+            steps.append(Step(f"{f.name}: segment {n} white", step_s / 2,
+                              lambda _p, n=n: seg_rgb(n, (0.5, 0.5, 0.5)),
+                              lambda n=n: seg_rgb(n, (0.0, 0.0, 0.0))))
+        for label, rgb in (("red", (0.5, 0, 0)), ("green", (0, 0.5, 0)), ("blue", (0, 0, 0.5))):
+            steps.append(Step(f"{f.name}: all segments {label}", step_s / 2,
+                              lambda _p, rgb=rgb: [seg_rgb(n, rgb) for n in segs],
+                              lambda: [seg_rgb(n, (0.0, 0.0, 0.0)) for n in segs]))
+    if f.has("motor"):
+        for slot in f.profile.channels["motor"].slots:
+            steps.append(Step(f"{f.name}: motor {slot}", step_s,
+                              lambda _p, s=slot: f.set("motor", s),
+                              lambda: f.set("motor", "hold")))
+    if f.has("white") and "full" in f.profile.channels["white"].slots:
+        steps.append(Step(f"{f.name}: white LEDs on", step_s / 2,
+                          lambda _p: f.set("white", "full"), lambda: f.set("white", "off")))
     if f.has("strobe"):
         ch = f.profile.channels["strobe"]
         if ch.hz_range or ch.period_ms:
