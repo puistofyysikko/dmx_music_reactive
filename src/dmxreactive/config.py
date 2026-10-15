@@ -9,7 +9,7 @@ import yaml
 
 from dmxreactive.dmx.artnet import ARTNET_PORT
 from dmxreactive.dmx.profiles import Fixture, FixtureProfile, Patch, ProfileError
-from dmxreactive.engine.show import MECHANICS, ShowConfig
+from dmxreactive.engine.show import MECHANICS, WASH_RGB, ShowConfig
 
 DEFAULT_CONFIG = Path("config/config.yaml")
 EXAMPLE_CONFIG = Path("config/config.example.yaml")
@@ -87,6 +87,12 @@ def load_config(path: str | Path | None = None) -> Config:
             raise ProfileError(f"show.{key} must be [lo, hi] with 0 <= lo < hi <= 1")
         return lo, hi
 
+    def rgb3(key: str, value) -> tuple[float, float, float]:
+        vals = tuple(float(v) for v in value)
+        if len(vals) != 3 or not all(0.0 <= v <= 1.0 for v in vals):
+            raise ProfileError(f"show.{key} must be three numbers between 0 and 1 (R, G, B)")
+        return vals  # type: ignore[return-value]
+
     show = ShowConfig(
         beat_lead_ms=float(sh.get("beat_lead_ms", d.beat_lead_ms)),
         max_flash_hz=float(sh.get("max_flash_hz", d.max_flash_hz)),
@@ -125,6 +131,11 @@ def load_config(path: str | Path | None = None) -> Config:
         breath_depth=float(sh.get("breath_depth", d.breath_depth)),
         derby_motor_ambient=str(sh.get("derby_motor_ambient", d.derby_motor_ambient)),
         derby_motor_beat=str(sh.get("derby_motor_beat", d.derby_motor_beat)),
+        wash_gain=float(sh.get("wash_gain", d.wash_gain)),
+        wash_gamma=float(sh.get("wash_gamma", d.wash_gamma)),
+        wash_balance=rgb3("wash_balance", sh.get("wash_balance", d.wash_balance)),
+        wash_colours=tuple((str(k), rgb3(f"wash_colours.{k}", v))
+                           for k, v in (sh.get("wash_colours") or {}).items()),
         mechanics=str(sh.get("mechanics", d.mechanics)),
         park_pan=float(sh.get("park_pan", d.park_pan)),
         park_tilt=float(sh.get("park_tilt", d.park_tilt)),
@@ -142,6 +153,12 @@ def load_config(path: str | Path | None = None) -> Config:
         raise ProfileError(f"show.gobo_palette: unknown gobo(s) {unknown}")
     if show.mechanics not in MECHANICS:
         raise ProfileError(f"show.mechanics must be one of {', '.join(MECHANICS)}")
+    if not 0.0 <= show.wash_gain <= 1.0 or not 0.5 <= show.wash_gamma <= 3.0:
+        raise ProfileError("show.wash_gain must be 0-1 and show.wash_gamma 0.5-3")
+    bad = [k for k, _ in show.wash_colours if k not in WASH_RGB]
+    if bad:
+        raise ProfileError(f"show.wash_colours: unknown colour(s) {bad}; known: "
+                           f"{', '.join(WASH_RGB)}")
     if show.static_colour not in ("white", "red", "orange", "yellow", "green", "blue", "cyan",
                                   "purple"):
         raise ProfileError(f"show.static_colour: unknown colour {show.static_colour!r}")

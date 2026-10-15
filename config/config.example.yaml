@@ -51,6 +51,11 @@ show:
   drop_dip: 0.25             # a breakdown = bass energy this far below the recent loud level
   drop_min_gap_s: 10         # at most one blast per this many seconds
   breath_period_s: 7         # ambient scene: moving head brightness breathes at this period
+  wash_gain: 1.0             # the wall wash's own brightness factor (on top of master)
+  wash_gamma: 1.0            # 1 = linear DMX; ~2 = perceptual (darkens the low end, deeper breathing)
+  wash_balance: [1.0, 1.0, 1.0]   # per-channel gain R,G,B: pull the strongest channel down so white looks white
+  # wash_colours:            # optional RGB overrides of the palette colours (0..1 each)
+  #   orange: [1.0, 0.25, 0.0]
   mechanics: full            # wear-free: static = head parked (gobo/colour wheel fixed) + Derby motor stopped; off = both dark (key m cycles live)
   park_pan: 0.5              # static mode: parked position of the moving head (within the pan/tilt limits)
   park_tilt: 0.5

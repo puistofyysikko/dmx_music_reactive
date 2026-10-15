@@ -87,6 +87,10 @@ class ShowConfig:
     breath_depth: float = 0.6  # ...dipping to (1 - depth) of its level at the bottom
     derby_motor_ambient: str = "slow"  # Derby beam motor slot (see its profile) per scene
     derby_motor_beat: str = "medium"
+    wash_gain: float = 1.0  # the wash's own brightness factor on top of `master`
+    wash_gamma: float = 1.0  # >1 darkens the low end (2 ~ perceptual); 1 = linear DMX
+    wash_balance: tuple[float, float, float] = (1.0, 1.0, 1.0)  # per-channel gain (white balance)
+    wash_colours: tuple[tuple[str, tuple[float, float, float]], ...] = ()  # RGB overrides
     mechanics: str = "full"  # wear-free modes: full | static (no motors/wheels move) | off
     park_pan: float = 0.5  # static mode: where the moving head is parked (within pan_limits)
     park_tilt: float = 0.5
@@ -729,14 +733,15 @@ class Show:
 
     def _apply_wash(self, fx, st: _MoverState, want: dict, dt: float) -> None:
         """RGB bar: colour crossfades (snaps during a drop blast), brightness is immediate."""
-        target = WASH_RGB.get(str(want.get("colour", "white")), WASH_RGB["white"])
+        name = str(want.get("colour", "white"))
+        target = dict(self.cfg.wash_colours).get(name) or WASH_RGB.get(name, WASH_RGB["white"])
         tau = 0.02 if self._blast_t0 is not None else 0.25
         st.rgb = [smooth_toward(a, b, dt, tau) for a, b in zip(st.rgb, target, strict=True)]
         for i in range(4):
             level = 0.0 if self.blackout else clamp01(float(want.get(f"seg{i}", 0.0)))
-            level *= self._master_now
-            for ch, v in zip("rgb", st.rgb, strict=True):
-                fx.set(f"s{i + 1}_{ch}", clamp01(v * level))
+            level = level ** self.cfg.wash_gamma * self.cfg.wash_gain * self._master_now
+            for ch, v, bal in zip("rgb", st.rgb, self.cfg.wash_balance, strict=True):
+                fx.set(f"s{i + 1}_{ch}", clamp01(v * bal * level))
 
     def _apply_effect(self, fx, st: _MoverState, want: dict) -> None:
         """Derby: on/off only (no dimmer): colour slot with a hold time, beam motor, white LEDs.

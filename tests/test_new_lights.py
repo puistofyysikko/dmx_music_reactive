@@ -276,3 +276,73 @@ def test_alt_sync_recovers_a_known_lag():
                   [x for i in range(20) for x in (float(i) + 1, float(i) + 1.5 + lag)])
     got, _, n = relative_lag_ms(on[1:])
     assert n >= 15 and abs(got - 12.0) < 0.5
+
+
+# -- wash tuning knobs ---------------------------------------------------------------------
+def wash_peak_rgb(**kw):
+    """Brightest RGB triple the wash emits during a beat-scene run with the given settings."""
+    show, _ = new_show(**kw)
+    ticks = simulate(show, analyse(click_track(150, 25.0, SR)))
+    late = [tk for tk in ticks if tk.mood == "beat" and tk.t > 15]
+    arr = np.array([tk.dmx["wash1"] for tk in late], dtype=float).reshape(-1, 4, 3)
+    return arr.max(axis=(0, 1))
+
+
+def test_wash_gain_scales_the_wash_and_defaults_are_unchanged():
+    base = wash_peak_rgb()
+    assert wash_peak_rgb(wash_gain=0.5).max() <= 0.55 * base.max() + 2
+    assert base.max() > 100
+
+
+def test_wash_balance_pulls_a_channel_down():
+    feats = breakdown_feats()  # includes a drop blast, whose wash is pure white
+    base = np.array([tk.dmx["wash1"] for tk in simulate(new_show()[0], feats)], dtype=float)
+    bal = np.array([tk.dmx["wash1"] for tk in simulate(new_show(wash_balance=(1.0, 0.5, 1.0))[0],
+                                                       feats)], dtype=float)
+    r, g, b = (base[:, k::3] for k in range(3))
+    white = (abs(r - g) < 2) & (abs(g - b) < 2) & (r > 60)  # segments showing full white
+    assert white.sum() > 20
+    assert np.allclose(bal[:, 1::3][white], 0.5 * g[white], atol=3)  # green halved
+    assert np.allclose(bal[:, 0::3][white], r[white], atol=3)  # red untouched
+
+
+def test_wash_gamma_darkens_the_low_end_but_not_full_level():
+    lin = wash_peak_rgb()
+    dark = wash_peak_rgb(wash_gamma=2.0)
+    assert dark.max() <= lin.max() and dark.max() > 0.5 * lin.max()
+
+
+def test_wash_colour_override_and_config_validation(tmp_path):
+    import yaml
+
+    from dmxreactive.dmx.profiles import ProfileError
+
+    raw = yaml.safe_load(EXAMPLE.read_text())
+    (tmp_path / "fixtures").symlink_to(ROOT / "config" / "fixtures")
+    raw["show"]["wash_colours"] = {"orange": [1.0, 0.1, 0.0]}
+    raw["show"]["wash_balance"] = [1.0, 0.8, 0.9]
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(yaml.safe_dump(raw))
+    show = load_config(cfg).show
+    assert dict(show.wash_colours)["orange"] == (1.0, 0.1, 0.0) and show.wash_balance[1] == 0.8
+    for bad in ({"wash_colours": {"mauve": [1, 0, 0]}}, {"wash_balance": [1.5, 1, 1]},
+                {"wash_gain": 2.0}, {"wash_gamma": 9}):
+        raw2 = yaml.safe_load(EXAMPLE.read_text())
+        raw2["show"].update(bad)
+        cfg.write_text(yaml.safe_dump(raw2))
+        with pytest.raises(ProfileError):
+            load_config(cfg)
+
+
+def test_wash_palette_program_covers_every_palette_colour():
+    from dmxreactive.control.camera_tests import build_script
+
+    config = load_config(EXAMPLE)
+    script = build_script(config.patch, "wash-palette", hold_s=4.0, lead_in_s=0.0)
+    labels = []
+    script._announce = labels.append
+    t = 0.0
+    while t < script.total:
+        script.update(t)
+        t += 0.05
+    assert sum("at 100%" in x for x in labels) == 8 and sum("at 25%" in x for x in labels) == 8

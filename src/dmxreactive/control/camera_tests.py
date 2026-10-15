@@ -14,7 +14,7 @@ from dmxreactive.dmx.profiles import Fixture, Patch
 
 SLATE_ON_S = 0.3
 SLATE_S = 1.0
-PROGRAMS = ("derby-motor", "wash-ramp", "wash-pulse", "wash-strobe")
+PROGRAMS = ("derby-motor", "wash-ramp", "wash-pulse", "wash-strobe", "wash-palette")
 DERBY_VALUES = (1, 32, 64, 96, 128, 144, 160, 176, 192, 208, 224, 240, 255)
 RAMP_LEVELS = (0.02, 0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0)
 PULSE_MS = (25, 50, 100, 200, 400)  # one frame at 40 Hz = 25 ms
@@ -83,6 +83,16 @@ def build_script(patch: Patch, program: str, *, wash_name: str | None = None,
             for lv in RAMP_LEVELS:
                 item(f"{wash.name}: {label} {lv * 100:g} %", min(hold_s, 3.0),
                      lambda _p, lv=lv, rgb=rgb: _bar(wash, lv, rgb), lambda: _bar(wash, 0.0))
+    elif program == "wash-palette":
+        # every palette colour of the show at full level, then at 25 %, for judging by eye (and
+        # on camera) which colours are too dim, too bright or off; raw mapping, no show gains
+        from dmxreactive.engine.show import PALETTE, WASH_RGB
+
+        for level in (1.0, 0.25):
+            for name in PALETTE:
+                item(f"{wash.name}: {name} at {level:.0%}", min(hold_s, 4.0),
+                     lambda _p, rgb=WASH_RGB[name], lv=level: _bar(wash, lv, rgb),
+                     lambda: _bar(wash, 0.0))
     elif program == "wash-strobe":
         # Alternating 100 ms pulses, 500 ms apart: wash on the second, strobe half a second
         # later. Which light is which is known from the order, so the lag of one relative to

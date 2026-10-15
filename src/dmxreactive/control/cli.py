@@ -530,7 +530,8 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_gobo_walk)
 
     p = sub.add_parser("camera-test", help="slated test program to film new fixtures (GoPro)")
-    p.add_argument("program", choices=["derby-motor", "wash-ramp", "wash-pulse", "wash-strobe"])
+    p.add_argument("program", choices=["derby-motor", "wash-ramp", "wash-pulse", "wash-strobe",
+                                       "wash-palette"])
     p.add_argument("--wash", help="wash fixture for slates/ramps (default: first in group washes)")
     p.add_argument("--derby", help="Derby fixture (default: first in group effects)")
     p.add_argument("--hold", type=float, default=8.0, help="seconds per item")
