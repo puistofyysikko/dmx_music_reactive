@@ -243,3 +243,36 @@ def test_config_rejects_unknown_mechanics(tmp_path):
     raw["show"]["mechanics"] = "static"
     cfg.write_text(yaml.safe_dump(raw))
     assert load_config(cfg).show.mechanics == "static"
+
+
+def test_wash_strobe_program_alternates_the_two_lights():
+    from dmxreactive.control.camera_tests import build_script
+
+    config = load_config(EXAMPLE)
+    script = build_script(config.patch, "wash-strobe", lead_in_s=0.0)
+    strobe, wash_fx = config.patch.get("strobe1"), config.patch.get("wash1")
+    seen = []
+    t = 0.0
+    while t < script.total:
+        script.update(t)
+        seen.append((t, max(wash_fx.dmx_values()), strobe.dmx_values()[0]))  # wash rgb, dimmer
+        t += 0.025
+    t0 = 1.0  # after the slate
+    wash_on = [t for t, w, _ in seen if t0 + 3 <= t < t0 + 4 and w > 0]
+    strobe_on = [t for t, _, s in seen if t0 + 3 <= t < t0 + 4 and s > 0]
+    assert wash_on and strobe_on
+    assert max(wash_on) < min(strobe_on)  # the wash pulses first, the strobe half a second later
+    assert 0.45 <= min(strobe_on) - min(wash_on) <= 0.55
+
+
+def test_alt_sync_recovers_a_known_lag():
+    import sys
+
+    sys.path.insert(0, str(ROOT / "tools"))
+    from alt_sync import relative_lag_ms
+
+    lag = 0.012  # strobe 12 ms behind the wash
+    on = np.array([k + (0.5 + lag if k % 2 else 0.0) for k in range(0, 1)] +
+                  [x for i in range(20) for x in (float(i) + 1, float(i) + 1.5 + lag)])
+    got, _, n = relative_lag_ms(on[1:])
+    assert n >= 15 and abs(got - 12.0) < 0.5

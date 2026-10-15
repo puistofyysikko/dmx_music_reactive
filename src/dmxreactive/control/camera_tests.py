@@ -14,7 +14,7 @@ from dmxreactive.dmx.profiles import Fixture, Patch
 
 SLATE_ON_S = 0.3
 SLATE_S = 1.0
-PROGRAMS = ("derby-motor", "wash-ramp", "wash-pulse")
+PROGRAMS = ("derby-motor", "wash-ramp", "wash-pulse", "wash-strobe")
 DERBY_VALUES = (1, 32, 64, 96, 128, 144, 160, 176, 192, 208, 224, 240, 255)
 RAMP_LEVELS = (0.02, 0.05, 0.1, 0.2, 0.35, 0.5, 0.75, 1.0)
 PULSE_MS = (25, 50, 100, 200, 400)  # one frame at 40 Hz = 25 ms
@@ -83,6 +83,23 @@ def build_script(patch: Patch, program: str, *, wash_name: str | None = None,
             for lv in RAMP_LEVELS:
                 item(f"{wash.name}: {label} {lv * 100:g} %", min(hold_s, 3.0),
                      lambda _p, lv=lv, rgb=rgb: _bar(wash, lv, rgb), lambda: _bar(wash, 0.0))
+    elif program == "wash-strobe":
+        # Alternating 100 ms pulses, 500 ms apart: wash on the second, strobe half a second
+        # later. Which light is which is known from the order, so the lag of one relative to
+        # the other falls out of the onset intervals (tools/alt_sync.py), no audio needed.
+        strobes = patch.group("strobes")
+        if not strobes or not strobes[0].has("dimmer"):
+            raise ValueError("wash-strobe needs a strobe fixture with a dimmer")
+        strobe = strobes[0]
+        total = max(hold_s, 30.0)
+
+        def alternate(p: float) -> None:
+            phase = (p * total) % 1.0
+            _bar(wash, 1.0 if phase < 0.1 else 0.0)
+            strobe.set("dimmer", 1.0 if 0.5 <= phase < 0.6 else 0.0)
+
+        item(f"{wash.name} / {strobe.name}: alternating pulses (wash on the second, strobe "
+             f"+0.5 s)", total, alternate, lambda: (_bar(wash, 0.0), strobe.blackout()))
     else:  # wash-pulse
         for ms in PULSE_MS:
             for rep in range(1, 4):
