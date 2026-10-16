@@ -763,6 +763,25 @@ Setup: Bluetooth speaker, `config/config_bt.yaml` (`light_delay_ms` 315, `beat_l
 `camera-test wash-palette` (GX014468, GoPro ISO 800, WB 5500 K, shutter 1/480): all 8 palette colours at 100 % and 25 % are stable (no flicker) and keep their chromaticity when dimmed (25 % / 100 % sums 0.21-0.26 except green 0.15, camera-noise level). Camera RGB at 100 %: red 62/2/4, orange 60/12/2, yellow 53/30/1, green -6/38/-4, cyan -6/34/77, blue -3/2/74, purple 34/5/66, white 45/46/61. Findings: the primaries are clean; **white at equal RGB is bluish (B ≈ 1.35 R, G in the encoded camera values)**, a blue gain of ~0.5-0.7 would neutralise it; yellow reads orange-leaning and cyan blue-leaning on the camera; green is only 19 % of white's camera brightness, which a camera with its green channel weighting cannot be compared to the eye on. These are numbers from an uncalibrated consumer camera (full-frame means, encoded values), not photometry.
 **Decision (user, by eye): colour balance does not matter much for disco lighting; levels are good, timing matters.** No palette or balance change. The knobs stay available (`show.wash_gain`, `wash_gamma`, `wash_balance`, `wash_colours`, defaults neutral) if taste ever asks for it; the first thing to try would be `wash_balance: [1.0, 1.0, 0.6]`. The user watched the palette test and noted that the wash pushes more light than before. Note for later measurements: the user has a PhD in spectral imaging; set up the GoPro (fixed ISO, white balance, flat profile) together before filming.
 
+## 13c-23. Day 8 (2026-10-16): idea, Raspberry Pi tapped after the Yamaha pre-amp
+
+**Idea (user):** the user and a friend both have a Yamaha WXC-50 pre-amplifier feeding Genelec active speakers. A Raspberry Pi (the user already owns a **Pi 4**) would sit beside the speakers, take the analog audio from the pre-amp output and run the show. Any source that reaches the Yamaha (PC, phone, AirPlay/MusicCast) then drives the lights, and the Bluetooth-only limitation goes away. **Verdict: green light, nothing built yet; this is a design note.**
+
+**Why it fits:**
+- The Pi hears what the speakers hear, after the Yamaha's network buffering and DSP, so the Bluetooth delay (`light_delay_ms` 315) should not be needed. Expect a wired-style profile with a small delay (capture buffer plus the Art-Net path; the wired PC profile was 60 ms). Measure it with the click track and two tempi (see `measurement-lessons`), and ask which chain was used.
+- Raspberry Pi OS uses PipeWire, and the panel is a terminal UI, so it can run headless over SSH.
+
+**Open points / risks (to check, not yet known):**
+1. **Audio input:** the Pi has no line-in. It needs a USB audio interface with a line input (about 15-30 EUR), fed from the pre-out through a passive RCA Y-splitter. A line input is high impedance (like a voltmeter in parallel), so it barely loads what the speakers get.
+2. **Yamaha outputs:** not verified. Check the back panel for a stereo pre-out, and whether the level is fixed or follows the volume knob. A fixed level is much better. If it follows the volume, check how the detection copes with a changing level (turning the music down must not kill the lights). Genelecs may take XLR, so an RCA-to-XLR adapter may already be in use.
+3. **CPU on the Pi 4:** the live analysis has not been measured there. Measure CPU use and dropped blocks first. A Pi 5 is the fallback.
+4. **Ground loop:** a Pi and USB interface on a different supply than the amp can add hum to the capture, which could trigger the lights (it would not reach the speakers). A cheap audio isolator fixes it.
+5. **Network:** the Pi needs Ethernet to the Art-Net node. A PoE hat could power it from the same switch.
+
+**Cheap test first (no new code):** plug a USB audio interface into the PC, tap the Yamaha pre-out, select that input and run the current project. This tests the tap, the level behaviour and the delay before any Pi work.
+
+**Possible follow-ups:** a `config/config_wired.yaml` profile for the Pi, a Pi setup section in the docs, and the hardware-agnostic notes for publishing (item 5 in the hand-off).
+
 ## 13d. Later hardware measurements (camera)
 
 **GoPro Hero 7 (≈ 240 fps)** was used for the first round (see §13c-8; the planned clips below were recorded and analysed) (the Sony a6000 tops out at 1080/60p, confirmed from its specs). Planned clips, in priority order:
@@ -783,9 +802,9 @@ Skipped on purpose: Pot Strobe above 10 Hz (the cap stays at 10 Hz).
 - Strobe mappings measured with camera (§6.2); safety caps in Hz (`safe_max_hz`).
 - Hardware verified 2026-10-02: node, both fixtures, channel walk, strobe rates. Still open: PicoSpot tilt range (200° vs 230°), gobo list, 10-minute jitter soak on the real network.
 
-## 14. Status and hand-off (updated 2026-10-14, evening)
+## 14. Status and hand-off (updated 2026-10-16)
 
-**State:** v0.1.0 is merged into `main` (squash-merged from `create/foundation`; the user set up their own git identity and keeps their real email private). Everything below is built, committed, tested (135 tests) and verified on the real rig where hardware is involved, except what the 2026-10-14 update below lists. Work since v0.1.0 lives on the branch `update/add_new_lights_and_features` (the user squash-merges it on GitHub at the end; commits there are allowed freely, pushing is not).
+**State:** v0.1.0 is merged into `main` (squash-merged from `create/foundation`; the user set up their own git identity and keeps their real email private). Everything below is built, committed, tested (135 tests) and verified on the real rig where hardware is involved, except what the 2026-10-14 update below lists. Work since v0.1.0 was squash-merged into `main` as d652eb5 (2026-10-15); the old feature branches are deleted. New work goes on a fresh branch (commits allowed freely, pushing and merging only after asking).
 
 ### What exists
 | Area | State |
@@ -810,7 +829,8 @@ Skipped on purpose: Pot Strobe above 10 Hz (the cap stays at 10 Hz).
 3. **Rig session with the new lights (mostly done 2026-10-15: static/off work on the rig; BT timing and wash-vs-strobe measured, §13c-21; wash brightness and colours judged OK by the user, §13c-22; a wired-chain clip is optional) and the **live test of the dark drop** with all lights (user will judge `drop_blackout_s` 1.5 s and the 90 s ration).
 4. **Taste tuning** of gobo palette (`show.gobo_palette`; available: open, ring, petals, star, mosaic, dots, swirl, slats), colours, flash/pulse levels, `drop_min_gap_s` (currently 10 s; ~100 blasts/h on the dance-heavy soak playlist).
 5. **Publishing later (repo is private, MIT):** README with a short demo/gif and a "hardware you need" section, hardware-agnostic profile notes for hobbyists, `docs/` cleanup, check `pyproject` dependencies (PyYAML, numpy, rich; dev: librosa, matplotlib, av), Linux/PipeWire-only caveat, remove user-specific notes from the memo if desired.
-6. **Ideas, low priority:** browser GUI on top of the control API; 4/4-only limitation of the bar tracker; kick-path latency (~100 ms before the light delay) cannot be led (options: `audio.block_size` 512, predictive drive scene); tap-tempo; C++ DSP only if CPU ever becomes a problem (it would not fix latency).
+6. **Raspberry Pi after the Yamaha WXC-50 (§13c-23):** green-lit design idea. First check the pre-amp's rear outputs (fixed or volume-following level), then do the cheap PC test with a USB audio interface, then the Pi 4 (measure CPU, delay, hum).
+7. **Ideas, low priority:** browser GUI on top of the control API; 4/4-only limitation of the bar tracker; kick-path latency (~100 ms before the light delay) cannot be led (options: `audio.block_size` 512, predictive drive scene); tap-tempo; C++ DSP only if CPU ever becomes a problem (it would not fix latency).
 
 ### Gotchas worth remembering
 - Latency measurements from click tracks repeat every click period: always confirm with two tempi (150 and 120 BPM); `tools/latency_analyze.py` now warns. The camera's A/V offset was calibrated (~0) with `tools/av_sync_flash.py`.
