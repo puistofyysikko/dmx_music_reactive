@@ -89,6 +89,7 @@ A normal USB-Ethernet dongle does **not** supply PoE. Do not connect a 48 V inje
   `nmcli con add type ethernet ifname <dongle-if> con-name dmx ip4 192.168.1.10/24 ipv4.never-default yes`
 - Send Art-Net by **unicast** to the node IP, UDP 6454. No firewall change is needed for sending; if we add discovery (ArtPoll replies come back to UDP 6454), open `6454/udp` in `firewalld` for that zone only.
 - The dongle interface name can change per port; use a udev/NetworkManager match on the dongle's MAC.
+- **Switching dongle use (internet vs DMX):** `scripts/net_profile.sh dmx|internet|status`. Two stored profiles on the same dongle; `internet` (DHCP) autoconnects by default on plug-in, `dmx` (static, no autoconnect) is switched on by hand before preflight/show, and back with `internet` afterwards. Only one is active at a time.
 
 ### 3.4 Fixture facts that shape the design (from the manuals)
 
@@ -841,4 +842,4 @@ Skipped on purpose: Pot Strobe above 10 Hz (the cap stays at 10 Hz).
 - Local-only (git-ignored): `config/config.yaml`, `config/config_bt.yaml`, `support/` media, `support/tracks/`, soak logs.
 
 ### Commands cheat-sheet
-`dmxreactive check-config | preflight [--walk] | run [--scene …] [--flash-path grid|kick] [--mechanics full|static|off] | camera-test derby-motor|wash-ramp|wash-pulse | analyze | meter | list-devices | record | sim | test-fixtures | hold | strobe-sweep | pulse-test | gobo-walk`. `scripts/start_show.sh`, `scripts/install_desktop_entry.sh`, `scripts/setup_dongle.sh`, `scripts/setup_dev.sh`. Tools: `analyze_track.py`, `simulate_show.py`, `bar_check.py`, `click_eval.py`, `pipeline_latency.py`, `latency_analyze.py`, `make_click_track.py`, `av_sync_flash.py`, `strobe_analyze.py`, `video_luma.py`, `soak.py`, `jitter_check.py`, `predrop_features.py`, `predrop_eval.py`.
+`dmxreactive check-config | preflight [--walk] | run [--scene …] [--flash-path grid|kick] [--mechanics full|static|off] | camera-test derby-motor|wash-ramp|wash-pulse | analyze | meter | list-devices | record | sim | test-fixtures | hold | strobe-sweep | pulse-test | gobo-walk`. `scripts/start_show.sh`, `scripts/install_desktop_entry.sh`, `scripts/setup_dongle.sh`, `scripts/net_profile.sh`, `scripts/setup_dev.sh`. Tools: `analyze_track.py`, `simulate_show.py`, `bar_check.py`, `click_eval.py`, `pipeline_latency.py`, `latency_analyze.py`, `make_click_track.py`, `av_sync_flash.py`, `strobe_analyze.py`, `video_luma.py`, `soak.py`, `jitter_check.py`, `predrop_features.py`, `predrop_eval.py`.
